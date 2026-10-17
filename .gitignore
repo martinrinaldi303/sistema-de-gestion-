@@ -1,0 +1,20 @@
+# Compilados y artefactos de .NET
+bin/
+obj/
+Publicacion/
+*.exe
+*.dll
+*.pdb
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Base de datos y datos locales (nunca se suben)
+*.db
+*.db-wal
+*.db-shm
+*.llave

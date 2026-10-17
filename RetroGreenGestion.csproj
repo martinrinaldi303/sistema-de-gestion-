@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <RollForward>LatestMajor</RollForward>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>RetroGreenGestion</RootNamespace>
+    <AssemblyName>RetroGreenGestion</AssemblyName>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- Ícono del .exe (lo que ve el usuario en el Escritorio) -->
+    <ApplicationIcon>Assets\retro-green.ico</ApplicationIcon>
+    <!-- Datos del ejecutable -->
+    <Product>Retro Green Gestión</Product>
+    <AssemblyTitle>Retro Green Gestión</AssemblyTitle>
+    <Company>Retro Green</Company>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Base encriptada: .Core + el bundle de SQLCipher. NO uses Microsoft.Data.Sqlite
+         a secas, ese bundle no soporta encriptacion. -->
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="8.0.10" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.10" />
+    <!-- Excel nativo, sin necesidad de tener Office instalado. -->
+    <PackageReference Include="ClosedXML" Version="0.102.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Logo embebido en el .exe: no hay que copiar archivos sueltos al lado.
+         PNG con fondo transparente, para que no se vea el recuadro negro. -->
+    <EmbeddedResource Include="Assets\retro-green.png" />
+    <!-- Mismo logo en .ico, para el ícono de las ventanas (barra de tareas / título). -->
+    <EmbeddedResource Include="Assets\retro-green.ico" />
+  </ItemGroup>
+
+</Project>

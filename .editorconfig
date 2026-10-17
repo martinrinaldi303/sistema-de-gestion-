@@ -1,0 +1,6 @@
+root = true
+
+[*.cs]
+# La app arma toda la UI por codigo (no usa el disenador de WinForms), asi que
+# la serializacion de diseno de los controles personalizados no aplica.
+dotnet_diagnostic.WFO1000.severity = none
