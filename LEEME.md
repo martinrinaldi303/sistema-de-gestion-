@@ -99,11 +99,73 @@ Documentos\Retro Green\
     gestion.db                  la base, encriptada
     Copias de seguridad\        las últimas 15, automáticas
     Exportaciones\              los Excel para el contador
+    Reportes diarios\           los Excel de cada cierre del día (se adjuntan al email)
 ```
 
 La carpeta de exportación se puede cambiar desde Cierre de mes. **Conviene apuntarla
 al pendrive o a Drive**: el Excel no está encriptado, y si queda en la notebook es el
 eslabón más fácil de llevarse.
+
+---
+
+## Reporte diario por email
+
+El programa puede mandarle al dueño un **reporte del día** por correo: un resumen en el
+cuerpo del mail (ingresos, egresos, neto, rendimiento por profesional, medios de pago y
+gastos) y un **Excel con el detalle del día** adjunto. Es un módulo aparte: **si el correo
+falla, no afecta en nada el cierre económico ni el resto del programa**.
+
+### Cómo configurarlo
+
+En el menú, **Reporte diario** (sólo lo ve el administrador). Ahí se cargan:
+
+- **Correo de destino** y **hora de envío**.
+- Los datos del servidor **SMTP**: host, puerto, TLS, usuario y remitente, más la contraseña.
+
+**Cambiar cualquiera de estos datos pide la contraseña de administrador.** Con Gmail: host
+`smtp.gmail.com`, puerto `587`, TLS activado, y como contraseña una
+[**contraseña de aplicación**](https://support.google.com/accounts/answer/185833) (no la
+del correo; requiere verificación en dos pasos). Outlook/Office365: `smtp.office365.com`,
+puerto `587`, TLS.
+
+### Cómo se protege la contraseña
+
+No se guarda en claro. Se cifra con **DPAPI de Windows** (atada al usuario que la configuró)
+y recién ese texto cifrado se guarda en la base, que además ya está encriptada con SQLCipher.
+Consecuencia: la contraseña **sólo se puede leer desde el mismo Windows y el mismo usuario**
+donde se cargó. Si se cambia de notebook o de cuenta de Windows, hay que volver a escribirla.
+
+### Cuándo se envía (y por qué no gasta batería)
+
+- **A la hora configurada**, mientras el programa esté abierto. Es el único timer del
+  programa (revisa una vez por minuto); el trabajo de red va fuera del hilo de la pantalla,
+  así que no la traba. Con el programa cerrado, sigue sin consumir nada.
+- Si a esa hora el programa estaba cerrado, **al abrirlo pone al día** los días que quedaron
+  pendientes (hasta 3 días para atrás, desde que se activó).
+- Nunca manda **dos veces el mismo día**. Si un envío falla (ej. sin internet), queda marcado
+  y **se reintenta** en la próxima vuelta o al reabrir (hasta 5 intentos por día).
+
+### Cómo probarlo
+
+En la misma pantalla, botón **"Enviar el reporte de hoy ahora"**: arma y manda el reporte del
+día en el momento (sirve también como "cierre del día" manual). Abajo se ve el estado del día
+(enviado / error con el detalle / todavía no).
+
+### Qué NO se manda
+
+Nunca sale la base de datos, el llavero ni las claves. El resumen y el Excel del día van
+**sin nombres de clientes ni notas**: son datos personales que no hacen falta en un reporte
+económico.
+
+### Si algo falla
+
+- *"Falta la contraseña SMTP (o no se puede leer)"*: se configuró en otra máquina/usuario de
+  Windows. Volvé a escribirla y guardá desde este Windows.
+- El estado del día dice **error**: ahí figura el motivo (host mal escrito, sin internet,
+  contraseña rechazada…). Corregí y usá "Enviar el reporte de hoy ahora", o esperá a que
+  reintente solo.
+- Para **desactivar** el envío automático: destildá "Enviar el reporte diario automáticamente"
+  y guardá (pide la contraseña de administrador).
 
 ---
 
@@ -125,7 +187,8 @@ Es la razón por la que elegí SQLite sobre Access: con Access habría que insta
 
 - El **porcentaje de comisión** real (el campo ya está, falta el número).
 - Si la **ficha de clientes** de la planilla también va al programa.
-- Si quiere **cierre de caja diario** además del mensual.
+- El **cierre diario** quedó cubierto en parte por el reporte diario por email (resumen +
+  Excel del día). Falta definir si además quiere un arqueo de caja en pantalla.
 - **Propinas**: hoy no se registran.
 - En qué **formato quiere el Excel el contador** — preguntarle a él directamente.
 
@@ -134,7 +197,9 @@ Es la razón por la que elegí SQLite sobre Access: con Access habría que insta
 ## Pila
 
 .NET 9 · WinForms · SQLite + SQLCipher (`Microsoft.Data.Sqlite.Core` +
-`SQLitePCLRaw.bundle_e_sqlcipher`) · ClosedXML para el Excel.
+`SQLitePCLRaw.bundle_e_sqlcipher`) · ClosedXML para el Excel · `System.Net.Mail` para el
+correo (SMTP+TLS, sin dependencias extra) · DPAPI (`System.Security.Cryptography.ProtectedData`)
+para la contraseña del correo · pruebas con xUnit en `Tests\`.
 
 ClosedXML y no Excel Interop: Interop necesita Office instalado, es lento y deja
 procesos de Excel colgados en memoria.

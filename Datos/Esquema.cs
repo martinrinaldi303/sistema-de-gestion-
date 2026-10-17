@@ -131,4 +131,23 @@ CREATE TABLE IF NOT EXISTS Config (
   valor  TEXT NOT NULL
 );
 """";
+
+    /// <summary>
+    /// Tablas que se agregaron DESPUES de la primera version. Se aplican con
+    /// CREATE TABLE IF NOT EXISTS cada vez que se abre la base, asi una base ya
+    /// creada tambien las recibe (la creacion inicial solo corre si esta vacia).
+    /// </summary>
+    public const string SqlReportes = """"
+-- ---------- Reporte diario por email (modulo agregado) ----------
+-- Un registro por dia: evita mandar dos veces el mismo dia y permite
+-- reintentar si el envio fallo (p. ej. sin internet al cerrar el dia).
+CREATE TABLE IF NOT EXISTS EnviosDiarios (
+  dia           TEXT PRIMARY KEY,                 -- 'AAAA-MM-DD'
+  estado        TEXT    NOT NULL,                 -- 'enviado' | 'error'
+  intentos      INTEGER NOT NULL DEFAULT 0,
+  ultimo_error  TEXT,                             -- mensaje saneado, sin credenciales
+  destino       TEXT,                             -- a quien se mando (para el rastro)
+  enviado_el    TEXT                              -- cuando quedo 'enviado'
+);
+"""";
 }

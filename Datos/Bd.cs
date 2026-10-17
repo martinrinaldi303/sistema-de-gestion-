@@ -13,11 +13,18 @@ public static class Bd
 {
     private static string _clave = "";
 
+    /// <summary>
+    /// Solo para pruebas: si se fija, la base y el llavero viven acá en vez de en
+    /// Documentos\Retro Green. Permite correr tests contra una base temporal sin
+    /// tocar los datos reales. En produccion siempre queda en null.
+    /// </summary>
+    internal static string? CarpetaBaseOverride;
+
     public static string Carpeta
     {
         get
         {
-            var c = Path.Combine(
+            var c = CarpetaBaseOverride ?? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                 "Retro Green");
             Directory.CreateDirectory(c);
@@ -325,6 +332,7 @@ public static class Bd
         {
             using var cn = Conectar();
             CrearSiHaceFalta(cn);
+            Migrar(cn);
             return true;
         }
         catch (SqliteException)
@@ -502,6 +510,13 @@ public static class Bd
         Sembrar(cn);
         tx.Commit();
     }
+
+    /// <summary>
+    /// Aplica las tablas agregadas despues de la primera version. Es idempotente
+    /// (CREATE TABLE IF NOT EXISTS), asi que correrlo en cada apertura no molesta:
+    /// una base vieja recibe las tablas nuevas y una nueva no cambia.
+    /// </summary>
+    private static void Migrar(SqliteConnection cn) => Ejecutar(cn, Esquema.SqlReportes);
 
     private static object? Escalar(SqliteConnection cn, string sql)
     {

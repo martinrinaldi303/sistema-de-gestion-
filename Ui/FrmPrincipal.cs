@@ -1,4 +1,5 @@
 using RetroGreenGestion.Datos;
+using RetroGreenGestion.Reportes;
 
 namespace RetroGreenGestion.Ui;
 
@@ -9,6 +10,11 @@ public sealed class FrmPrincipal : Form
     private readonly Label _aviso = new();
     private Form? _actual;
     private Button? _activo;
+
+    // Timer liviano del reporte diario: revisa una vez por minuto si hay que enviar.
+    // Es el único timer del programa; el trabajo de red se hace fuera del hilo de UI.
+    private readonly System.Windows.Forms.Timer _timerReportes = new() { Interval = 60_000 };
+    private volatile bool _enviandoReportes;
 
     public FrmPrincipal()
     {
@@ -24,7 +30,14 @@ public sealed class FrmPrincipal : Form
         ArmarNav();
         Abrir("Servicios del día", () => new FrmServicios());
         Tema.AdornoLogo(this, 46, 16);   // adorno fijo arriba a la derecha
-        Load += (s, e) => RevisarExportacionesPendientes();
+        Load += (s, e) =>
+        {
+            RevisarExportacionesPendientes();
+            RevisarReportes();            // catch-up al abrir: pone al día lo pendiente
+        };
+        _timerReportes.Tick += (s, e) => RevisarReportes();
+        _timerReportes.Start();
+        FormClosed += (s, e) => _timerReportes.Stop();
     }
 
     private void ArmarNav()
@@ -84,6 +97,7 @@ public sealed class FrmPrincipal : Form
         {
             Opcion("Catálogos", () => new FrmCatalogos());
             Opcion("Cierre de mes", () => new FrmCierre());
+            Opcion("Reporte diario", () => new FrmReportes());
             Opcion("Usuarios", () => new FrmUsuarios());
         }
 
@@ -156,6 +170,36 @@ public sealed class FrmPrincipal : Form
     {
         using var f = new FrmCambiarClave();
         f.ShowDialog(this);
+    }
+
+    /// <summary>
+    /// Revisa si corresponde mandar el reporte diario (hoy pasada la hora, o días
+    /// que quedaron pendientes) y lo hace en segundo plano. Nunca molesta al usuario
+    /// ni frena el programa: si falla, queda registrado y se reintenta en la próxima
+    /// vuelta o al reabrir. Que el correo salga o no es independiente del resto.
+    /// </summary>
+    private void RevisarReportes()
+    {
+        if (_enviandoReportes) return;   // evita solaparse con la vuelta anterior
+        try
+        {
+            var cfg = ConfigCorreo.Cargar();
+            if (!cfg.Activo || !cfg.EstaConfigurada) return;
+
+            var pass = ConfigCorreo.LeerContrasena();
+            if (pass is null) return;    // sin contraseña legible no se puede enviar
+
+            _enviandoReportes = true;
+            var enviador = new SmtpEnviador(cfg, pass);
+            var ahora = DateTime.Now;
+            Task.Run(() =>
+            {
+                try { ServicioReportes.ProcesarAutomatico(enviador, cfg, ahora); }
+                catch { /* ServicioReportes ya registra sus errores; no hay a quién avisar acá */ }
+                finally { _enviandoReportes = false; }
+            });
+        }
+        catch { _enviandoReportes = false; /* nunca romper la UI por el correo */ }
     }
 }
 

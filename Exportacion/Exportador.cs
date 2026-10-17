@@ -67,6 +67,62 @@ public static class Exportador
         return new ResultadoExport(archivo, servicios.Rows.Count, egresos.Rows.Count);
     }
 
+    /// <summary>
+    /// Excel del día, para adjuntar al reporte diario por email. Mismos helpers y
+    /// estilo que el mensual. El detalle de servicios va SIN las columnas Cliente y
+    /// Nota: son datos personales que no hacen falta en un reporte económico y no
+    /// queremos sacarlos por correo.
+    /// </summary>
+    public static ResultadoExport GenerarDia(DateTime dia, string carpetaDestino)
+    {
+        Directory.CreateDirectory(carpetaDestino);
+        var archivo = Path.Combine(carpetaDestino, $"Retro Green dia {Repo.Dia(dia)}.xlsx");
+
+        var servicios = Repo.ListarServiciosRango(dia, dia);
+        foreach (var col in new[] { "Cliente", "Nota" })
+            if (servicios.Columns.Contains(col)) servicios.Columns.Remove(col);
+        var egresos = Repo.ListarEgresosRango(dia, dia);
+
+        var (cant, ingresosCent) = Repo.ServiciosDia(dia);
+        var egresosCent = Repo.EgresosDia(dia);
+        var netoCent = ingresosCent - egresosCent;
+
+        using var libro = new XLWorkbook();
+
+        // ------------------------------------------------------------ Resumen
+        var h = libro.Worksheets.Add("Resumen");
+        Titulo(h, "A1:E1", "RETRO GREEN - BARBERÍA & PELUQUERÍA");
+        Titulo(h, "A2:E2", $"Cierre del día {dia:dd/MM/yyyy}", 12);
+
+        h.Cell("A4").Value = "Total ingresos";
+        h.Cell("B4").Value = Bd.APesos(ingresosCent);
+        h.Cell("A5").Value = "Total egresos";
+        h.Cell("B5").Value = Bd.APesos(egresosCent);
+        h.Cell("A6").Value = "Resultado neto";
+        h.Cell("B6").Value = Bd.APesos(netoCent);
+        h.Cell("A7").Value = "Servicios realizados";
+        h.Cell("B7").Value = cant;
+
+        h.Range("A4:A7").Style.Font.Bold = true;
+        h.Range("B4:B6").Style.NumberFormat.Format = "$ #,##0.00";
+        h.Cell("B6").Style.Font.Bold = true;
+        h.Cell("B6").Style.Font.FontColor = netoCent >= 0 ? XLColor.DarkGreen : XLColor.DarkRed;
+
+        var fila = 9;
+        fila = Bloque(h, fila, "Rendimiento por profesional", Repo.PorProfesionalDia(dia));
+        fila = Bloque(h, fila + 1, "Ingresos por medio de pago", Repo.PorMedioPagoDia(dia));
+        Bloque(h, fila + 1, "Gastos por categoría", Repo.PorCategoriaDia(dia));
+
+        h.Columns().AdjustToContents();
+
+        // ------------------------------------------------------- detalle del día
+        Hoja(libro, "Servicios del día", servicios, "Precio");
+        Hoja(libro, "Egresos del día", egresos, "Monto");
+
+        libro.SaveAs(archivo);
+        return new ResultadoExport(archivo, servicios.Rows.Count, egresos.Rows.Count);
+    }
+
     // -------------------------------------------------------------- helpers
 
     private static void Titulo(IXLWorksheet h, string rango, string texto, double tam = 15)

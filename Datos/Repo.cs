@@ -203,6 +203,23 @@ public static class Repo
     public static void AnularEgreso(long id)
         => Bd.Ejecutar("UPDATE Egresos SET anulado = 1 WHERE id = $id;", ("$id", id));
 
+    /// <summary>Egresos entre dos fechas (sirve para el detalle de un día en el reporte).</summary>
+    public static DataTable ListarEgresosRango(DateTime desde, DateTime hasta)
+        => Bd.Tabla(@"
+            SELECT e.id                AS Id,
+                   e.fecha             AS Fecha,
+                   c.nombre            AS Categoria,
+                   e.descripcion       AS Descripcion,
+                   e.monto_cent/100.0  AS Monto,
+                   m.nombre            AS ""Medio de pago"",
+                   IFNULL(e.detalle,'') AS Detalle
+            FROM Egresos e
+            JOIN CategoriasGasto c ON c.id = e.categoria_id
+            JOIN MediosPago      m ON m.id = e.medio_pago_id
+            WHERE e.anulado = 0 AND e.fecha BETWEEN $d AND $h
+            ORDER BY e.fecha DESC, e.id DESC;",
+            ("$d", Dia(desde)), ("$h", Dia(hasta)));
+
     /// <summary>Gasto total de un dia puntual.</summary>
     public static long EgresosDia(DateTime dia)
         => Bd.EscalarLong(
@@ -334,6 +351,40 @@ public static class Repo
             SELECT categoria AS Categoria, total_cent/100.0 AS Total
             FROM ResumenGasto WHERE periodo = $p ORDER BY total_cent DESC;", ("$p", periodo));
     }
+
+    // ----------------------------------------------------- desglose de un dia
+    // Mismas reglas que las vistas mensuales (incluida la formula de comision),
+    // pero acotadas a una fecha. Las usa el reporte diario por email. No hay
+    // fallback al resumen guardado: el detalle de un dia reciente siempre esta.
+
+    public static DataTable PorProfesionalDia(DateTime dia)
+        => Bd.Tabla(@"
+            SELECT p.nombre                                      AS Profesional,
+                   COUNT(*)                                      AS Servicios,
+                   SUM(l.precio_cent)/100.0                      AS Total,
+                   ROUND(100.0 * SUM(l.precio_cent)
+                         / NULLIF(SUM(SUM(l.precio_cent)) OVER (), 0), 1) AS ""% del Total"",
+                   p.comision_porcentaje                         AS ""% Comisión"",
+                   ROUND(SUM(l.precio_cent) * p.comision_porcentaje / 100.0)/100.0 AS Comisión
+            FROM LibroDiario l
+            JOIN Profesionales p ON p.id = l.profesional_id
+            WHERE l.anulado = 0 AND l.fecha = $d
+            GROUP BY p.id, p.nombre, p.comision_porcentaje
+            ORDER BY Total DESC;", ("$d", Dia(dia)));
+
+    public static DataTable PorMedioPagoDia(DateTime dia)
+        => Bd.Tabla(@"
+            SELECT m.nombre AS ""Medio de pago"", SUM(l.precio_cent)/100.0 AS Total
+            FROM LibroDiario l JOIN MediosPago m ON m.id = l.medio_pago_id
+            WHERE l.anulado = 0 AND l.fecha = $d
+            GROUP BY m.id, m.nombre ORDER BY Total DESC;", ("$d", Dia(dia)));
+
+    public static DataTable PorCategoriaDia(DateTime dia)
+        => Bd.Tabla(@"
+            SELECT c.nombre AS Categoria, SUM(e.monto_cent)/100.0 AS Total
+            FROM Egresos e JOIN CategoriasGasto c ON c.id = e.categoria_id
+            WHERE e.anulado = 0 AND e.fecha = $d
+            GROUP BY c.id, c.nombre ORDER BY Total DESC;", ("$d", Dia(dia)));
 
     // ------------------------------------------------------------ dashboard
 

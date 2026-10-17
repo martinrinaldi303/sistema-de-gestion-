@@ -26,6 +26,19 @@
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.10" />
     <!-- Excel nativo, sin necesidad de tener Office instalado. -->
     <PackageReference Include="ClosedXML" Version="0.102.3" />
+    <!-- DPAPI para proteger la contraseña SMTP (ligada al usuario de Windows). -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- El proyecto de tests necesita ver el seam interno de Bd (carpeta de base). -->
+    <InternalsVisibleTo Include="RetroGreenGestion.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- El proyecto de tests vive en Tests\ (subcarpeta): sus .cs son de ESE proyecto,
+         no de este. Sin esto, el SDK los tomaría acá por el glob **/*.cs. -->
+    <Compile Remove="Tests\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>
