@@ -285,6 +285,9 @@ public sealed class PanelCatalogo : UserControl
             Tema.Error("Elegí primero una fila de la lista.");
             return;
         }
+        if (!Autorizacion.PedirAdmin(this, $"Vas a activar/desactivar \"{f["Nombre"]}\"."))
+            return;
+
         var id = Convert.ToInt64(f["Id"]);
         Bd.Ejecutar($"UPDATE {_tabla} SET activo = 1 - activo WHERE id = $id;", ("$id", id));
         Recargar();

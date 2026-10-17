@@ -172,6 +172,9 @@ public static class Bd
     public static bool VerificarClave(string clave)
         => Llavero.Existe && Usuario.Length > 0 && Llavero.AbrirConUsuario(Usuario, clave) != null;
 
+    /// <summary>¿Esta clave es la de algún administrador? (para autorizar acciones protegidas).</summary>
+    public static bool VerificarAdmin(string clave) => Llavero.EsClaveDeAdmin(clave);
+
     // ------------------------------------------------------- usuarios (admin)
 
     public static IReadOnlyList<(string nombre, bool admin)> ListaUsuarios() => Llavero.ListaUsuarios();

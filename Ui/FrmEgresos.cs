@@ -147,7 +147,8 @@ public sealed class FrmEgresos : Form
             Tema.Error("Elegí primero una fila de la lista.");
             return;
         }
-        if (!Tema.Confirmar($"¿Anular este gasto?\n\n{fila["Descripcion"]} - {fila["Monto"]:C2}"))
+        if (!Autorizacion.PedirAdmin(this,
+                $"Vas a ANULAR este gasto:\n{fila["Descripcion"]} - {fila["Monto"]:C2}"))
             return;
 
         Repo.AnularEgreso(Convert.ToInt64(fila["Id"]));

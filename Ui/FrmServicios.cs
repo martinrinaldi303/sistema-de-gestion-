@@ -181,7 +181,7 @@ public sealed class FrmServicios : Form
         var limpiar = Tema.Boton("Limpiar");
         limpiar.Width = 130;
         limpiar.Margin = new Padding(0, 4, 0, 4);
-        limpiar.Click += (s, e) => { _cliente.Clear(); _nota.Clear(); _cliente.Focus(); };
+        limpiar.Click += (s, e) => LimpiarFormulario();
 
         flow.Controls.Add(agregar);
         flow.Controls.Add(anular);
@@ -309,6 +309,18 @@ public sealed class FrmServicios : Form
         _profesional.Focus();
     }
 
+    /// <summary>Reinicia el formulario de carga para empezar de cero.</summary>
+    private void LimpiarFormulario()
+    {
+        _cliente.Clear();
+        _nota.Clear();
+        if (_fecha.Value.Date != DateTime.Today) _fecha.Value = DateTime.Today;
+        if (_servicio.SelectedItem is Item it)
+            _precio.Text = Bd.APesos(it.Cent).ToString("0.##");
+        _grilla.ClearSelection();
+        _profesional.Focus();
+    }
+
     private void Anular()
     {
         if (_grilla.CurrentRow?.DataBoundItem is not DataRowView fila)
@@ -318,8 +330,8 @@ public sealed class FrmServicios : Form
         }
 
         var desc = $"{fila["Servicio"]} de {fila["Profesional"]} por {fila["Precio"]:C2}";
-        if (!Tema.Confirmar($"¿Anular este servicio?\n\n{desc}\n\n" +
-                            "No se borra: queda marcado como anulado y deja de sumar."))
+        if (!Autorizacion.PedirAdmin(this,
+                $"Vas a ANULAR este servicio:\n{desc}\n(No se borra: queda marcado como anulado y deja de sumar.)"))
             return;
 
         Repo.AnularServicio(Convert.ToInt64(fila["Id"]));

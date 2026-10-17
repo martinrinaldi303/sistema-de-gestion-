@@ -152,7 +152,8 @@ public sealed class FrmUsuarios : Form
             Tema.Error("Elegí primero un usuario de la lista.");
             return;
         }
-        if (!Tema.Confirmar($"¿Eliminar al usuario \"{nombre}\"?\nNo va a poder entrar más.")) return;
+        if (!Autorizacion.PedirAdmin(this,
+                $"Vas a ELIMINAR al usuario \"{nombre}\".\n(No va a poder entrar más.)")) return;
 
         try
         {

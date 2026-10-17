@@ -222,6 +222,13 @@ public sealed class FrmCierre : Form
 
         if (!Tema.Confirmar(aviso, "Cierre de mes")) return;
 
+        // Si además se va a BORRAR el detalle, pedimos la clave del administrador.
+        if (_borrar.Checked &&
+            !Autorizacion.PedirAdmin(this,
+                $"Vas a BORRAR el detalle de {Exportador.NombreMes(periodo)} después de exportar.\n" +
+                "(Los totales se conservan; el detalle día por día se elimina.)"))
+            return;
+
         Cursor = Cursors.WaitCursor;
         try
         {

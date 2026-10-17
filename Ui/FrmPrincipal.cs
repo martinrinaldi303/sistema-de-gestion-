@@ -345,7 +345,7 @@ public sealed class FrmEmergencia : Form
         quitar.Enabled = Bd.HayEmergencia;
         quitar.Click += (s, e) =>
         {
-            if (!Tema.Confirmar("¿Desactivar la contraseña de emergencia?")) return;
+            if (!Autorizacion.PedirAdmin(this, "Vas a DESACTIVAR la contraseña de emergencia.")) return;
             Bd.QuitarEmergencia();
             Tema.Aviso("Contraseña de emergencia desactivada.");
             Close();
@@ -367,6 +367,9 @@ public sealed class FrmEmergencia : Form
             _mensaje.Text = "Las dos no coinciden.";
             return;
         }
+        if (!Autorizacion.PedirAdmin(this,
+                "Vas a configurar/cambiar la CONTRASEÑA DE EMERGENCIA (la que borra la base)."))
+            return;
 
         try
         {

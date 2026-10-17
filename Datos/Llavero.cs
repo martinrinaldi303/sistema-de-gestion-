@@ -133,6 +133,14 @@ public static class Llavero
         return arch.Usuarios.Any(u => Desenvolver(u.Sobre, clave, arch.Iteraciones) != null);
     }
 
+    /// <summary>true si la clave es la de algún usuario ADMINISTRADOR.</summary>
+    public static bool EsClaveDeAdmin(string clave)
+    {
+        if (!Existe || string.IsNullOrEmpty(clave)) return false;
+        var arch = Cargar();
+        return arch.Usuarios.Any(u => u.EsAdmin && Desenvolver(u.Sobre, clave, arch.Iteraciones) != null);
+    }
+
     /// <summary>
     /// Prueba el codigo contra cada sobre no usado. Devuelve la DEK y el indice
     /// del sobre que abrio (para marcarlo despues), o null si el codigo no sirve.
