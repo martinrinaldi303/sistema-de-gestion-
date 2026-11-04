@@ -25,15 +25,32 @@ public sealed record Respuesta(string Texto)
 /// </summary>
 public static class Asistente
 {
-    public static Respuesta Responder(string pregunta)
+    public static Respuesta Responder(string pregunta) => Responder(pregunta, DateTime.Today);
+
+    /// <summary>Igual que <see cref="Responder(string)"/> pero con "hoy" fijo (para tests).</summary>
+    public static Respuesta Responder(string pregunta, DateTime hoy)
     {
         var q = Normalizar(pregunta);
         if (q.Length == 0) return Ayuda();
 
-        var hoy = DateTime.Today;
+        hoy = hoy.Date;
         var periodo = Repo.Periodo(hoy);
         var esMes = Contiene(q, "mes", "mensual");
         var esAyer = Contiene(q, "ayer");
+        var semana = Semana(q, hoy);
+        var pideCliente = Contiene(q, "cliente", "historial", "preferencia");
+
+        // Un profesional puntual: "qué hizo Pedro esta semana", "cómo le fue a Anahí".
+        // Va antes que clientes; para un cliente con el mismo nombre, "cliente pedro".
+        if (!pideCliente && BuscarProfesional(q) is { } prof)
+            return DeProfesional(prof, semana, hoy);
+
+        // Todos los profesionales en una semana: "qué hizo cada profesional por semana",
+        // "quién hizo más la semana pasada", "comisiones de esta semana".
+        if (semana is { } sem &&
+            (Contiene(q, "profesional", "peluquero", "barbero", "comision", "cada uno", "mejor") ||
+             (Contiene(q, "quien") && Contiene(q, "hizo", "trabajo", "mas"))))
+            return ProfesionalesSemana(sem, PideVariasSemanas(q));
 
         // Pregunta sobre un cliente puntual: "qué hizo martín", "cliente ana",
         // "preferencias de pedro", "historial de juan".
@@ -157,6 +174,149 @@ public static class Asistente
         { Barras = barras, Titulo = "POR PROFESIONAL — ESTE MES" };
     }
 
+    // ------------------------------------------------------- por semana
+
+    /// <summary>Una semana de lunes a domingo, con cómo nombrarla en la respuesta.</summary>
+    private readonly record struct Rango(DateTime Desde, DateTime Hasta, string Nombre)
+    {
+        public string Fechas => $"{Desde:dd/MM} al {Hasta:dd/MM}";
+    }
+
+    /// <summary>
+    /// La semana que pide la pregunta (lunes como inicio, igual que la pantalla de
+    /// Servicios), o null si no habla de semanas.
+    /// </summary>
+    private static Rango? Semana(string q, DateTime hoy)
+    {
+        if (!Contiene(q, "semana")) return null;
+        var lunes = hoy.AddDays(-(((int)hoy.DayOfWeek + 6) % 7));
+        var pasada = Contiene(q, "semana pasada", "semana anterior", "anterior semana");
+        if (pasada) lunes = lunes.AddDays(-7);
+        return new Rango(lunes, lunes.AddDays(6), pasada ? "la semana pasada" : "esta semana");
+    }
+
+    private static bool PideVariasSemanas(string q)
+        => Contiene(q, "por semana", "cada semana", "semanal", "semanas");
+
+    /// <summary>Lo que hizo cada profesional en la semana; con "por semana" suma las 3 anteriores.</summary>
+    private static Respuesta ProfesionalesSemana(Rango sem, bool variasSemanas)
+    {
+        var dt = Repo.PorProfesionalRango(sem.Desde, sem.Hasta);
+        var sb = new StringBuilder();
+        var titulo = $"POR PROFESIONAL — {sem.Nombre.ToUpperInvariant()} ({sem.Fechas})";
+
+        if (dt.Rows.Count == 0)
+            sb.Append($"No hay servicios cargados {sem.Nombre} ({sem.Fechas}).");
+        else
+        {
+            sb.Append($"{Capital(sem.Nombre)} ({sem.Fechas}):");
+            foreach (DataRow r in dt.Rows)
+            {
+                sb.Append($"\n• {r["Profesional"]}: {Convert.ToInt32(r["Servicios"])} serv. · {Plata(Dec(r, "Total"))}");
+                if (Dec(r, "Comisión") > 0) sb.Append($" · comisión {Plata(Dec(r, "Comisión"))}");
+            }
+            var cant = dt.Rows.Cast<DataRow>().Sum(r => Convert.ToInt32(r["Servicios"]));
+            var total = dt.Rows.Cast<DataRow>().Sum(r => Dec(r, "Total"));
+            sb.Append($"\nTotal: {cant} servicios por {Plata(total)}.");
+        }
+
+        if (variasSemanas)
+        {
+            sb.Append("\n\nSemanas anteriores:");
+            for (var i = 1; i <= 3; i++)
+            {
+                var desde = sem.Desde.AddDays(-7 * i);
+                var hasta = desde.AddDays(6);
+                var ant = Repo.PorProfesionalRango(desde, hasta);
+                var detalle = ant.Rows.Count == 0
+                    ? "sin servicios"
+                    : string.Join(" · ", ant.Rows.Cast<DataRow>().Select(r =>
+                        $"{r["Profesional"]} {Plata(Dec(r, "Total"))} ({Convert.ToInt32(r["Servicios"])})"));
+                sb.Append($"\n• {desde:dd/MM}–{hasta:dd/MM}: {detalle}");
+            }
+        }
+
+        var barras = dt.Rows.Cast<DataRow>()
+            .Select(r => new BarrasHorizontales.Dato(
+                r["Profesional"].ToString()!, Dec(r, "Total"),
+                $"{Convert.ToInt32(r["Servicios"])} serv."))
+            .ToList();
+        return new Respuesta(sb.ToString()) { Barras = barras.Count > 0 ? barras : null, Titulo = titulo };
+    }
+
+    /// <summary>
+    /// El profesional nombrado en la pregunta (sin importar acentos/mayúsculas), o null.
+    /// Gana el nombre completo; si no, alcanza con una palabra del nombre ("pedro" → "Pedro Gómez").
+    /// </summary>
+    private static string? BuscarProfesional(string q)
+    {
+        var palabras = q.Split(SeparadoresPalabra, StringSplitOptions.RemoveEmptyEntries).ToHashSet();
+        var nombres = Repo.NombresProfesionales();
+
+        var completo = nombres.FirstOrDefault(n =>
+        {
+            var partes = Normalizar(n).Split(SeparadoresPalabra, StringSplitOptions.RemoveEmptyEntries);
+            return partes.Length > 0 && partes.All(palabras.Contains);
+        });
+        if (completo is not null) return completo;
+
+        return nombres.FirstOrDefault(n => Normalizar(n)
+            .Split(SeparadoresPalabra, StringSplitOptions.RemoveEmptyEntries)
+            .Any(p => p.Length >= 3 && palabras.Contains(p)));
+    }
+
+    /// <summary>Lo que hizo un profesional en la semana pedida o, si no dice semana, en el mes.</summary>
+    private static Respuesta DeProfesional(string prof, Rango? semana, DateTime hoy)
+    {
+        var rango = semana ?? new Rango(new DateTime(hoy.Year, hoy.Month, 1),
+            new DateTime(hoy.Year, hoy.Month, 1).AddMonths(1).AddDays(-1), "este mes");
+
+        var fila = Repo.PorProfesionalRango(rango.Desde, rango.Hasta).Rows.Cast<DataRow>()
+            .FirstOrDefault(r => string.Equals(r["Profesional"].ToString(), prof, StringComparison.OrdinalIgnoreCase));
+        if (fila is null)
+            return new Respuesta($"{prof} no tiene servicios cargados {rango.Nombre} ({rango.Fechas}).");
+
+        var texto = $"{prof}, {rango.Nombre} ({rango.Fechas}): {Convert.ToInt32(fila["Servicios"])} servicios " +
+                    $"por {Plata(Dec(fila, "Total"))} ({Dec(fila, "% del Total"):0.#}% del total del local).";
+        if (Dec(fila, "Comisión") > 0)
+            texto += $"\nComisión ({Dec(fila, "% Comisión"):0.#}%): {Plata(Dec(fila, "Comisión"))}.";
+
+        var suyos = Repo.ListarServiciosRango(rango.Desde, rango.Hasta).Rows.Cast<DataRow>()
+            .Where(r => string.Equals(r["Profesional"].ToString(), prof, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        List<BarrasHorizontales.Dato> barras;
+        string titulo;
+        if (semana is not null)
+        {
+            // Semana: un renglón por día, de lunes a domingo (también los días sin servicios).
+            barras = Enumerable.Range(0, 7).Select(i =>
+            {
+                var dia = rango.Desde.AddDays(i);
+                var delDia = suyos.Where(r => r["Fecha"].ToString() == Repo.Dia(dia)).ToList();
+                return new BarrasHorizontales.Dato(
+                    $"{DiasCortos[i]} {dia:dd/MM}", delDia.Count, Plata(delDia.Sum(r => Dec(r, "Precio"))));
+            }).ToList();
+            titulo = $"{prof.ToUpperInvariant()} — SERVICIOS POR DÍA ({rango.Fechas})";
+        }
+        else
+        {
+            barras = suyos.GroupBy(r => r["Servicio"].ToString()!)
+                .Select(g => new BarrasHorizontales.Dato(g.Key, g.Count(), Plata(g.Sum(r => Dec(r, "Precio")))))
+                .OrderByDescending(d => d.Valor).ToList();
+            titulo = $"{prof.ToUpperInvariant()} — SERVICIOS DEL MES";
+        }
+
+        return new Respuesta(texto) { Barras = barras, BarrasComoMoneda = false, Titulo = titulo };
+    }
+
+    private static readonly string[] DiasCortos = { "lun", "mar", "mié", "jue", "vie", "sáb", "dom" };
+
+    private static readonly char[] SeparadoresPalabra =
+        { ' ', '\t', '?', '¿', '!', '¡', '.', ',', ';', ':', '-', '/', '(', ')' };
+
+    private static string Capital(string s) => s.Length == 0 ? s : char.ToUpper(s[0]) + s[1..];
+
     private static Respuesta TopServicios(string periodo)
     {
         var dt = Repo.TopServicios(periodo);
@@ -231,6 +391,8 @@ public static class Asistente
         "• ¿Cuánto gasté este mes?\n" +
         "• ¿Cuál es el neto del mes?\n" +
         "• ¿Quién hizo más este mes?\n" +
+        "• ¿Qué hizo cada profesional esta semana? / la semana pasada / por semana\n" +
+        "• ¿Qué hizo <profesional> esta semana? / este mes\n" +
         "• ¿Qué servicios son los más pedidos?\n" +
         "• ¿Cómo me pagan? (medios de pago)\n" +
         "• ¿Cómo venimos los últimos meses?\n" +
@@ -254,6 +416,8 @@ public static class Asistente
         var cue = Contiene(q, "cliente", "historial", "preferencia", "atend", "suele", "vino")
                || (Contiene(q, "hizo", "hace", "hacia") && !Contiene(q, "quien", "mas", "mejor"));
         if (!cue) return null;
+        // "qué hizo cada profesional" es del equipo, no de un cliente.
+        if (Contiene(q, "profesional", "peluquero", "barbero", "cada uno", "cada una")) return null;
 
         var nombre = ExtraerNombreCliente(original);
         if (nombre.Length < 2) return null;
@@ -309,7 +473,7 @@ public static class Asistente
         };
     }
 
-    private static decimal Dec(DataRow r, string col) => Convert.ToDecimal(r[col]);
+    private static decimal Dec(DataRow r, string col) => r[col] is DBNull ? 0m : Convert.ToDecimal(r[col]);
     private static string Plata(decimal v) => v.ToString("C0");
 
     private static string FechaCorta(string iso)
@@ -394,7 +558,7 @@ public sealed class FrmAsistente : Form
         string[] sugerencias =
         {
             "¿Cuántos cortes hoy?", "¿Cuánto facturé hoy?", "Ingresos del mes", "Gastos del mes",
-            "Neto del mes", "¿Quién hizo más?", "Servicios más pedidos", "Medios de pago", "Últimos meses"
+            "Neto del mes", "¿Quién hizo más?", "Profesionales por semana", "Servicios más pedidos", "Medios de pago", "Últimos meses"
         };
         using (var fuente = Tema.Titulo(10.5f))
             foreach (var texto in sugerencias)

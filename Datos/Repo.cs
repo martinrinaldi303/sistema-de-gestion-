@@ -357,7 +357,14 @@ public static class Repo
     // pero acotadas a una fecha. Las usa el reporte diario por email. No hay
     // fallback al resumen guardado: el detalle de un dia reciente siempre esta.
 
-    public static DataTable PorProfesionalDia(DateTime dia)
+    public static DataTable PorProfesionalDia(DateTime dia) => PorProfesionalRango(dia, dia);
+
+    /// <summary>
+    /// Servicios, total y comisión por profesional entre dos fechas (inclusive): sirve
+    /// para un día, una semana, etc. Lee el detalle vivo, así que un mes ya cerrado y
+    /// purgado no tiene desglose por semana (sólo queda su resumen mensual).
+    /// </summary>
+    public static DataTable PorProfesionalRango(DateTime desde, DateTime hasta)
         => Bd.Tabla(@"
             SELECT p.nombre                                      AS Profesional,
                    COUNT(*)                                      AS Servicios,
@@ -368,9 +375,14 @@ public static class Repo
                    ROUND(SUM(l.precio_cent) * p.comision_porcentaje / 100.0)/100.0 AS Comisión
             FROM LibroDiario l
             JOIN Profesionales p ON p.id = l.profesional_id
-            WHERE l.anulado = 0 AND l.fecha = $d
+            WHERE l.anulado = 0 AND l.fecha BETWEEN $d AND $h
             GROUP BY p.id, p.nombre, p.comision_porcentaje
-            ORDER BY Total DESC;", ("$d", Dia(dia)));
+            ORDER BY Total DESC;", ("$d", Dia(desde)), ("$h", Dia(hasta)));
+
+    /// <summary>Nombres de todos los profesionales, también los desactivados (tienen historial).</summary>
+    public static List<string> NombresProfesionales()
+        => Bd.Tabla("SELECT nombre FROM Profesionales ORDER BY nombre;").Rows.Cast<DataRow>()
+            .Select(r => r["nombre"].ToString()!).ToList();
 
     public static DataTable PorMedioPagoDia(DateTime dia)
         => Bd.Tabla(@"
