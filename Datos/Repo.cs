@@ -706,14 +706,42 @@ public static class Repo
 
     // ========================================================== turnos (agenda)
 
-    public static void AgregarTurno(DateTime fecha, string hora, string cliente,
+    public static void AgregarTurno(DateTime fecha, string hora, string cliente, string clienteEmail,
         long? profesionalId, long? servicioId, int duracionMin, string nota)
         => Bd.Ejecutar(@"
-            INSERT INTO Turnos (fecha, hora, cliente, profesional_id, servicio_id, duracion_min, estado, nota, cargado_por, cargado_el)
-            VALUES ($f, $h, $cli, $prof, $serv, $dur, 'pendiente', $nota, $u, $e);",
-            ("$f", Dia(fecha)), ("$h", hora), ("$cli", cliente),
+            INSERT INTO Turnos (fecha, hora, cliente, cliente_email, profesional_id, servicio_id, duracion_min, estado, nota, cargado_por, cargado_el)
+            VALUES ($f, $h, $cli, $mail, $prof, $serv, $dur, 'pendiente', $nota, $u, $e);",
+            ("$f", Dia(fecha)), ("$h", hora), ("$cli", cliente), ("$mail", clienteEmail),
             ("$prof", profesionalId), ("$serv", servicioId), ("$dur", duracionMin),
             ("$nota", nota), ("$u", Bd.Usuario), ("$e", DateTime.Now.ToString("s")));
+
+    /// <summary>Un turno al que hay que mandarle el recordatorio.</summary>
+    public sealed record TurnoRecordatorio(long Id, string Cliente, string Email, string Fecha, string Hora);
+
+    /// <summary>
+    /// Turnos pendientes con email, cuyo horario cae dentro de la ventana [ahora, ahora+horas]
+    /// y a los que todavía no se les avisó. Es lo que manda el bot de recordatorios.
+    /// </summary>
+    public static List<TurnoRecordatorio> TurnosParaRecordar(DateTime ahora, int horasAntes)
+    {
+        var desde = ahora.ToString("yyyy-MM-dd HH:mm");
+        var hasta = ahora.AddHours(horasAntes).ToString("yyyy-MM-dd HH:mm");
+        return Bd.Tabla(@"
+            SELECT id, IFNULL(cliente,'') AS cliente, IFNULL(cliente_email,'') AS email, fecha, hora
+            FROM Turnos
+            WHERE estado = 'pendiente' AND recordatorio_enviado = 0
+              AND IFNULL(cliente_email,'') <> ''
+              AND (fecha || ' ' || hora) >= $d AND (fecha || ' ' || hora) <= $h
+            ORDER BY fecha, hora;", ("$d", desde), ("$h", hasta))
+            .Rows.Cast<DataRow>()
+            .Select(r => new TurnoRecordatorio(
+                Convert.ToInt64(r["id"]), r["cliente"].ToString()!, r["email"].ToString()!,
+                r["fecha"].ToString()!, r["hora"].ToString()!))
+            .ToList();
+    }
+
+    public static void MarcarRecordatorioEnviado(long turnoId)
+        => Bd.Ejecutar("UPDATE Turnos SET recordatorio_enviado = 1 WHERE id = $id;", ("$id", turnoId));
 
     private const string SelectTurno = @"
             SELECT t.id              AS Id,

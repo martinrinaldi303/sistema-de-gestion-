@@ -527,6 +527,17 @@ public static class Bd
         Ejecutar(cn, Esquema.SqlReportes);
         Ejecutar(cn, Esquema.SqlStock);
         Ejecutar(cn, Esquema.SqlTurnos);
+        // Columnas agregadas a tablas que ya podían existir (el CREATE no las agrega).
+        AgregarColumnaSiFalta(cn, "Turnos", "cliente_email", "TEXT");
+        AgregarColumnaSiFalta(cn, "Turnos", "recordatorio_enviado", "INTEGER NOT NULL DEFAULT 0");
+    }
+
+    // Agrega una columna sólo si la tabla todavía no la tiene (ALTER falla si ya existe).
+    private static void AgregarColumnaSiFalta(SqliteConnection cn, string tabla, string columna, string definicion)
+    {
+        var existe = Tabla(cn, $"PRAGMA table_info({tabla});").Rows.Cast<DataRow>()
+            .Any(r => string.Equals(r["name"].ToString(), columna, StringComparison.OrdinalIgnoreCase));
+        if (!existe) Ejecutar(cn, $"ALTER TABLE {tabla} ADD COLUMN {columna} {definicion};");
     }
 
     private static object? Escalar(SqliteConnection cn, string sql)

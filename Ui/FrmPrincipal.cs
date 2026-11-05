@@ -187,7 +187,7 @@ public sealed class FrmPrincipal : Form
         try
         {
             var cfg = ConfigCorreo.Cargar();
-            if (!cfg.Activo || !cfg.EstaConfigurada) return;
+            if (!cfg.EstaConfigurada) return;   // sin correo configurado no hay reporte ni recordatorios
 
             var pass = ConfigCorreo.LeerContrasena();
             if (pass is null) return;    // sin contraseña legible no se puede enviar
@@ -197,8 +197,11 @@ public sealed class FrmPrincipal : Form
             var ahora = DateTime.Now;
             Task.Run(() =>
             {
+                // Cada servicio decide si corresponde actuar (reporte diario / recordatorios de turnos).
                 try { ServicioReportes.ProcesarAutomatico(enviador, cfg, ahora); }
-                catch { /* ServicioReportes ya registra sus errores; no hay a quién avisar acá */ }
+                catch { /* ServicioReportes ya registra sus errores */ }
+                try { ServicioRecordatorios.ProcesarAutomatico(enviador, cfg, ahora); }
+                catch { /* best-effort: no molestar al usuario con esto */ }
                 finally { _enviandoReportes = false; }
             });
         }

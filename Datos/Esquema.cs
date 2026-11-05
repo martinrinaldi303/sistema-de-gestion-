@@ -214,6 +214,8 @@ CREATE TABLE IF NOT EXISTS Turnos (
   estado        TEXT    NOT NULL DEFAULT 'pendiente', -- pendiente|atendido|cancelado|ausente
   nota          TEXT,
   servicio_registrado INTEGER NOT NULL DEFAULT 0,  -- si ya se pasó al libro diario
+  cliente_email TEXT,                              -- para el recordatorio automático
+  recordatorio_enviado INTEGER NOT NULL DEFAULT 0, -- si ya se le avisó al cliente
   cargado_por   TEXT    NOT NULL,
   cargado_el    TEXT    NOT NULL
 );

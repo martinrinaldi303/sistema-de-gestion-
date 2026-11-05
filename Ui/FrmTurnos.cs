@@ -1,5 +1,6 @@
 using System.Data;
 using RetroGreenGestion.Datos;
+using RetroGreenGestion.Reportes;
 
 namespace RetroGreenGestion.Ui;
 
@@ -15,6 +16,7 @@ public sealed class FrmTurnos : Form
         Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Width = 80, Font = Tema.Normal(10f)
     };
     private readonly TextBox _cliente = Tema.Caja(180);
+    private readonly TextBox _clienteEmail = Tema.Caja(200);
     private readonly ComboBox _prof = Tema.Combo(160);
     private readonly ComboBox _serv = Tema.Combo(180);
     private readonly TextBox _duracion = Tema.Caja(70);
@@ -28,6 +30,11 @@ public sealed class FrmTurnos : Form
     private readonly TextBox _precio = Tema.Caja(110);
     private readonly ComboBox _medio = Tema.Combo(150);
 
+    // Bot de recordatorios (solo admin)
+    private readonly CheckBox _recActivo = new();
+    private readonly TextBox _recHoras = Tema.Caja(70);
+    private readonly TextBox _recTexto = Tema.Caja(560);
+
     public FrmTurnos()
     {
         Tema.AplicarA(this);
@@ -36,7 +43,7 @@ public sealed class FrmTurnos : Form
 
         var raiz = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, BackColor = Tema.Fondo, ColumnCount = 2, RowCount = 3,
+            Dock = DockStyle.Fill, BackColor = Tema.Fondo, ColumnCount = 2, RowCount = 4,
             Padding = new Padding(24, 20, 24, 20), AutoScroll = true
         };
         raiz.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
@@ -44,21 +51,28 @@ public sealed class FrmTurnos : Form
         raiz.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         raiz.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         raiz.RowStyles.Add(new RowStyle(SizeType.Absolute, 320));
+        raiz.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var cab = Tema.CabeceraPantalla("Turnos", "Operaciones diarias");
         raiz.Controls.Add(cab, 0, 0);
         raiz.SetColumnSpan(cab, 2);
         raiz.Controls.Add(TarjetaAlta(), 0, 1);
-        raiz.SetColumnSpan(TarjetaAlta(), 1);
         raiz.Controls.Add(TarjetaRegistrar(), 1, 1);
         raiz.Controls.Add(Agenda(), 0, 2);
         raiz.Controls.Add(Tema.TarjetaContenedor("Próximos turnos", _proximos, Tema.Verde), 1, 2);
+
+        if (Bd.EsAdmin)
+        {
+            var rec = TarjetaRecordatorios();
+            raiz.Controls.Add(rec, 0, 3);
+            raiz.SetColumnSpan(rec, 2);
+        }
 
         Controls.Add(raiz);
 
         _diaVer.ValueChanged += (s, e) => RecargarDia();
         _grilla.SelectionChanged += (s, e) => PrefillPrecio();
-        Load += (s, e) => { CargarCombos(); RecargarDia(); RecargarProximos(); };
+        Load += (s, e) => { CargarCombos(); RecargarDia(); RecargarProximos(); if (Bd.EsAdmin) CargarRecordatorios(); };
     }
 
     private Control TarjetaAlta()
@@ -69,6 +83,7 @@ public sealed class FrmTurnos : Form
         campos.Controls.Add(Tema.Campo("Fecha", _fecha));
         campos.Controls.Add(Tema.Campo("Hora", _hora));
         campos.Controls.Add(Tema.Campo("Cliente", _cliente));
+        campos.Controls.Add(Tema.Campo("Email cliente", _clienteEmail));
         campos.Controls.Add(Tema.Campo("Profesional", _prof));
         campos.Controls.Add(Tema.Campo("Servicio", _serv));
         campos.Controls.Add(Tema.Campo("Duración (min)", _duracion));
@@ -170,8 +185,8 @@ public sealed class FrmTurnos : Form
         try
         {
             Repo.AgregarTurno(_fecha.Value.Date, _hora.Value.ToString("HH:mm"), _cliente.Text.Trim(),
-                ProfId(), ServId(), dur, _nota.Text.Trim());
-            _cliente.Clear(); _nota.Clear();
+                _clienteEmail.Text.Trim(), ProfId(), ServId(), dur, _nota.Text.Trim());
+            _cliente.Clear(); _clienteEmail.Clear(); _nota.Clear();
             if (_fecha.Value.Date == _diaVer.Value.Date) RecargarDia();
             RecargarProximos();
         }
@@ -207,5 +222,56 @@ public sealed class FrmTurnos : Form
             RecargarDia(); RecargarProximos();
         }
         catch (Exception ex) { Tema.Error("No se pudo registrar.\n\n" + ex.Message); }
+    }
+
+    // ------------------------------------------------- bot de recordatorios (admin)
+
+    private Control TarjetaRecordatorios()
+    {
+        _recTexto.Multiline = true; _recTexto.Height = 54; _recTexto.ScrollBars = ScrollBars.Vertical;
+        _recActivo.Text = "Enviar recordatorio por email al cliente";
+        _recActivo.ForeColor = Tema.Texto; _recActivo.Font = Tema.Normal(9.5f); _recActivo.AutoSize = true;
+        _recActivo.Margin = new Padding(0, 0, 0, 6);
+
+        var tl = Pila("BOT DE RECORDATORIOS DE TURNOS");
+        tl.Controls.Add(new Label
+        {
+            Text = "Avisa a los clientes con email cuyo turno cae dentro de las próximas N horas, " +
+                   "preguntándoles si van a venir. Usa el mismo correo configurado en \"Reporte diario\". " +
+                   "Guardar pide la clave de administrador.",
+            Font = Tema.Normal(8.5f), ForeColor = Tema.Apagado, AutoSize = true,
+            MaximumSize = new Size(840, 0), Margin = new Padding(0, 0, 0, 8)
+        });
+        tl.Controls.Add(_recActivo);
+        var fila = new FlowLayoutPanel { AutoSize = true, WrapContents = true, BackColor = Tema.Panel };
+        fila.Controls.Add(Tema.Campo("Horas antes", _recHoras));
+        fila.Controls.Add(Tema.Campo("Mensaje ({cliente}, {fecha}, {hora}, {negocio})", _recTexto));
+        tl.Controls.Add(fila);
+        var guardar = Tema.Boton("Guardar recordatorios", primario: true); guardar.Width = 220;
+        guardar.Click += (s, e) => GuardarRecordatorios();
+        tl.Controls.Add(Fila(guardar));
+        return Card(tl, 860);
+    }
+
+    private void CargarRecordatorios()
+    {
+        var c = ConfigRecordatorios.Cargar();
+        _recActivo.Checked = c.Activo;
+        _recHoras.Text = c.HorasAntes.ToString();
+        _recTexto.Text = c.Texto;
+    }
+
+    private void GuardarRecordatorios()
+    {
+        if (!int.TryParse(_recHoras.Text.Trim(), out var h) || h <= 0)
+        { Tema.Error("Las horas tienen que ser un número mayor a cero."); return; }
+        if (!Autorizacion.PedirAdmin(this, "Vas a cambiar la configuración del bot de recordatorios de turnos.")) return;
+        try
+        {
+            new ConfigRecordatorios { Activo = _recActivo.Checked, HorasAntes = h, Texto = _recTexto.Text.Trim() }.Guardar();
+            Tema.Aviso("Recordatorios guardados.\nSe envían automáticamente mientras el programa está abierto " +
+                       "(requiere el correo configurado en \"Reporte diario\").");
+        }
+        catch (Exception ex) { Tema.Error("No se pudo guardar.\n\n" + ex.Message); }
     }
 }
