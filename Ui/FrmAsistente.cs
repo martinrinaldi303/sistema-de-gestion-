@@ -40,6 +40,14 @@ public static class Asistente
         var semana = Semana(q, hoy);
         var pideCliente = Contiene(q, "cliente", "historial", "preferencia");
 
+        // Stock / inventario: "cuánto queda de X", "qué falta", "valor del inventario".
+        if (Contiene(q, "stock", "inventario", "producto", "productos", "reponer", "falta", "faltan", "minimo", "queda", "quedan"))
+            return Stock(q);
+
+        // Turnos / agenda: "cuántos turnos hoy", "próximos turnos", "turnos de Pedro".
+        if (Contiene(q, "turno", "turnos", "agenda", "cita", "citas"))
+            return Turnos(q, hoy);
+
         // Un profesional puntual: "qué hizo Pedro esta semana", "cómo le fue a Anahí".
         // Va antes que clientes; para un cliente con el mismo nombre, "cliente pedro".
         if (!pideCliente && BuscarProfesional(q) is { } prof)
@@ -364,6 +372,83 @@ public static class Asistente
         { Meses = meses, Titulo = "EVOLUCIÓN — ÚLTIMOS MESES" };
     }
 
+    // ------------------------------------------------------------- stock
+
+    private static Respuesta Stock(string q)
+    {
+        if (Contiene(q, "valor", "cuanto vale", "plata en"))
+            return new Respuesta($"El inventario vale {Bd.Plata(Repo.ValorInventarioCent())} (stock por costo).");
+
+        if (Contiene(q, "falta", "faltan", "reponer", "minimo", "comprar", "bajo"))
+        {
+            var bajo = Repo.ProductosBajoMinimo();
+            if (bajo.Rows.Count == 0) return new Respuesta("No hay productos bajo el mínimo. Todo con stock suficiente.");
+            var sb = new StringBuilder("Productos bajo el mínimo (conviene reponer):");
+            foreach (DataRow r in bajo.Rows)
+                sb.Append($"\n• {r["Producto"]}: quedan {r["Stock"]} (mínimo {r["Mínimo"]})");
+            var barras = bajo.Rows.Cast<DataRow>()
+                .Select(r => new BarrasHorizontales.Dato(r["Producto"].ToString()!, Convert.ToInt32(r["Stock"]))).ToList();
+            return new Respuesta(sb.ToString()) { Barras = barras, BarrasComoMoneda = false, Titulo = "BAJO MÍNIMO" };
+        }
+
+        var prods = Repo.ProductosActivos();
+        // "¿cuánto queda de X?"
+        var match = prods.FirstOrDefault(p => p.Nombre.Length >= 3 && Normalizar(q).Contains(Normalizar(p.Nombre)));
+        if (match is not null)
+            return new Respuesta($"Quedan {match.StockActual} de {match.Nombre}.");
+
+        if (prods.Count == 0)
+            return new Respuesta("Todavía no hay productos cargados. Cargalos en la pantalla Stock.");
+
+        var sb2 = new StringBuilder("Stock actual:");
+        foreach (var p in prods.Take(12)) sb2.Append($"\n• {p.Nombre}: {p.StockActual}");
+        var barras2 = prods.Take(12).Select(p => new BarrasHorizontales.Dato(p.Nombre, p.StockActual)).ToList();
+        return new Respuesta(sb2.ToString()) { Barras = barras2, BarrasComoMoneda = false, Titulo = "STOCK ACTUAL" };
+    }
+
+    // ------------------------------------------------------------- turnos
+
+    private static Respuesta Turnos(string q, DateTime hoy)
+    {
+        // "turnos de <profesional>"
+        if (BuscarProfesional(q) is { } prof)
+        {
+            var suyos = Repo.ProximosTurnos(50).Rows.Cast<DataRow>()
+                .Where(r => string.Equals(r["Profesional"].ToString(), prof, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (suyos.Count == 0) return new Respuesta($"No hay turnos próximos de {prof}.");
+            var sb = new StringBuilder($"Próximos turnos de {prof}:");
+            foreach (var r in suyos) sb.Append($"\n• {FechaCorta(r["Fecha"].ToString()!)} {r["Hora"]} — {r["Cliente"]}");
+            return new Respuesta(sb.ToString());
+        }
+
+        if (Contiene(q, "proximo", "proximos", "siguiente", "que vienen", "agenda"))
+        {
+            var dt = Repo.ProximosTurnos();
+            if (dt.Rows.Count == 0) return new Respuesta("No hay turnos pendientes próximos.");
+            var sb = new StringBuilder("Próximos turnos:");
+            foreach (DataRow r in dt.Rows)
+                sb.Append($"\n• {FechaCorta(r["Fecha"].ToString()!)} {r["Hora"]} — {r["Cliente"]}");
+            return new Respuesta(sb.ToString());
+        }
+
+        if (Contiene(q, "semana"))
+        {
+            var lunes = hoy.AddDays(-(((int)hoy.DayOfWeek + 6) % 7));
+            var dt = Repo.TurnosRango(lunes, lunes.AddDays(6));
+            return new Respuesta($"Esta semana ({lunes:dd/MM} al {lunes.AddDays(6):dd/MM}) hay {dt.Rows.Count} turnos agendados.");
+        }
+
+        var dia = Contiene(q, "manana", "mañana") ? hoy.AddDays(1) : hoy;
+        var cuando = Contiene(q, "manana", "mañana") ? "Mañana" : "Hoy";
+        var lista = Repo.TurnosDia(dia);
+        var n = Repo.ContarTurnos(dia);
+        var sb2 = new StringBuilder($"{cuando} hay {n} turnos.");
+        foreach (DataRow r in lista.Rows)
+            if ((string)r["Estado"] != "cancelado")
+                sb2.Append($"\n• {r["Hora"]} — {r["Cliente"]}");
+        return new Respuesta(sb2.ToString());
+    }
+
     // ------------------------------------------------------------- helpers
 
     private static List<BarrasHorizontales.Dato> BarrasPorDia()
@@ -396,6 +481,8 @@ public static class Asistente
         "• ¿Qué servicios son los más pedidos?\n" +
         "• ¿Cómo me pagan? (medios de pago)\n" +
         "• ¿Cómo venimos los últimos meses?\n" +
+        "• ¿Qué turnos hay hoy / mañana? / próximos turnos / turnos de <profesional>\n" +
+        "• Stock: ¿qué falta reponer? / ¿cuánto queda de <producto>? / valor del inventario\n" +
         "• ¿Qué hizo <cliente>? / preferencias de <cliente>\n\n" +
         "Escribí tu pregunta o tocá uno de los botones de arriba.");
 
@@ -558,7 +645,8 @@ public sealed class FrmAsistente : Form
         string[] sugerencias =
         {
             "¿Cuántos cortes hoy?", "¿Cuánto facturé hoy?", "Ingresos del mes", "Gastos del mes",
-            "Neto del mes", "¿Quién hizo más?", "Profesionales por semana", "Servicios más pedidos", "Medios de pago", "Últimos meses"
+            "Neto del mes", "¿Quién hizo más?", "Profesionales por semana", "Servicios más pedidos", "Medios de pago", "Últimos meses",
+            "¿Qué turnos hay hoy?", "Próximos turnos", "¿Qué falta reponer?", "Valor del inventario"
         };
         using (var fuente = Tema.Titulo(10.5f))
             foreach (var texto in sugerencias)
