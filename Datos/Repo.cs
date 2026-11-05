@@ -703,4 +703,69 @@ public static class Repo
         var ing = Bd.EscalarLong("SELECT IFNULL(SUM(precio_cent),0) FROM VentasProducto WHERE anulado = 0 AND fecha = $d;", ("$d", d));
         return (cant, ing);
     }
+
+    // ========================================================== turnos (agenda)
+
+    public static void AgregarTurno(DateTime fecha, string hora, string cliente,
+        long? profesionalId, long? servicioId, int duracionMin, string nota)
+        => Bd.Ejecutar(@"
+            INSERT INTO Turnos (fecha, hora, cliente, profesional_id, servicio_id, duracion_min, estado, nota, cargado_por, cargado_el)
+            VALUES ($f, $h, $cli, $prof, $serv, $dur, 'pendiente', $nota, $u, $e);",
+            ("$f", Dia(fecha)), ("$h", hora), ("$cli", cliente),
+            ("$prof", profesionalId), ("$serv", servicioId), ("$dur", duracionMin),
+            ("$nota", nota), ("$u", Bd.Usuario), ("$e", DateTime.Now.ToString("s")));
+
+    private const string SelectTurno = @"
+            SELECT t.id              AS Id,
+                   t.fecha           AS Fecha,
+                   t.hora            AS Hora,
+                   IFNULL(t.cliente,'')   AS Cliente,
+                   IFNULL(p.nombre,'')    AS Profesional,
+                   IFNULL(s.nombre,'')    AS Servicio,
+                   t.estado          AS Estado,
+                   IFNULL(t.nota,'')      AS Nota
+            FROM Turnos t
+            LEFT JOIN Profesionales p ON p.id = t.profesional_id
+            LEFT JOIN Servicios     s ON s.id = t.servicio_id";
+
+    public static DataTable TurnosDia(DateTime dia)
+        => Bd.Tabla($"{SelectTurno} WHERE t.fecha = $d ORDER BY t.hora;", ("$d", Dia(dia)));
+
+    public static DataTable TurnosRango(DateTime desde, DateTime hasta)
+        => Bd.Tabla($"{SelectTurno} WHERE t.fecha BETWEEN $d AND $h ORDER BY t.fecha, t.hora;",
+            ("$d", Dia(desde)), ("$h", Dia(hasta)));
+
+    public static DataTable ProximosTurnos(int cuantos = 12)
+        => Bd.Tabla($"{SelectTurno} WHERE t.fecha >= $hoy AND t.estado = 'pendiente' ORDER BY t.fecha, t.hora LIMIT $n;",
+            ("$hoy", Dia(DateTime.Today)), ("$n", cuantos));
+
+    public static int ContarTurnos(DateTime dia)
+        => (int)Bd.EscalarLong("SELECT COUNT(*) FROM Turnos WHERE fecha = $d AND estado <> 'cancelado';", ("$d", Dia(dia)));
+
+    public static void CambiarEstadoTurno(long id, string estado)
+        => Bd.Ejecutar("UPDATE Turnos SET estado = $e WHERE id = $id;", ("$e", estado), ("$id", id));
+
+    /// <summary>
+    /// Pasa un turno al libro diario como servicio (reusa el alta de servicios) y lo
+    /// deja en 'atendido'. El turno tiene que tener profesional y servicio.
+    /// </summary>
+    public static void RegistrarServicioDesdeTurno(long turnoId, long precioCent, long medioPagoId)
+    {
+        var dt = Bd.Tabla(@"
+            SELECT t.fecha, IFNULL(t.cliente,'') AS cliente, t.profesional_id, t.servicio_id,
+                   s.nombre AS servicio, t.servicio_registrado
+            FROM Turnos t LEFT JOIN Servicios s ON s.id = t.servicio_id
+            WHERE t.id = $id;", ("$id", turnoId));
+        if (dt.Rows.Count == 0) throw new InvalidOperationException("No existe el turno.");
+        var r = dt.Rows[0];
+        if (Convert.ToInt32(r["servicio_registrado"]) == 1)
+            throw new InvalidOperationException("Este turno ya se registró como servicio.");
+        if (r["profesional_id"] is DBNull || r["servicio_id"] is DBNull)
+            throw new InvalidOperationException("El turno necesita profesional y servicio para registrarlo.");
+
+        var fecha = DateTime.ParseExact(r["fecha"].ToString()!, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        AgregarServicio(fecha, Convert.ToInt64(r["profesional_id"]), Convert.ToInt64(r["servicio_id"]),
+            r["servicio"].ToString()!, precioCent, medioPagoId, r["cliente"].ToString()!, "Desde turno");
+        Bd.Ejecutar("UPDATE Turnos SET estado = 'atendido', servicio_registrado = 1 WHERE id = $id;", ("$id", turnoId));
+    }
 }

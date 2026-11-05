@@ -89,6 +89,7 @@ public sealed class FrmPrincipal : Form
         Opcion("Servicios del día", () => new FrmServicios());
         Opcion("Egresos", () => new FrmEgresos());
         Opcion("Stock", () => new FrmStock());
+        Opcion("Turnos", () => new FrmTurnos());
         Opcion("Clientes", () => new FrmClientes());
         Opcion("Resumen mensual", () => new FrmResumen());
         Opcion("Asistente", () => new FrmAsistente());
