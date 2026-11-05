@@ -147,7 +147,7 @@ public sealed class FrmStock : Form
 
     private static FlowLayoutPanel Pila(string titulo)
     {
-        var tl = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = Tema.Panel };
+        var tl = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = Tema.Panel };
         tl.Controls.Add(new Label { Text = titulo, Font = Tema.Titulo(10f), ForeColor = Tema.Verde, AutoSize = true, Margin = new Padding(0, 0, 0, 6) });
         return tl;
     }
@@ -159,7 +159,7 @@ public sealed class FrmStock : Form
     }
     private static Control Card(Control inner)
     {
-        var card = new PanelRedondo { AutoSize = true, Radio = 14, ColorBorde = Tema.Borde, AccentoVerde = true, BackColor = Tema.Panel, Padding = new Padding(16, 14, 16, 14), Margin = new Padding(0, 0, 12, 12) };
+        var card = new PanelRedondo { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Radio = 14, ColorBorde = Tema.Borde, AccentoVerde = true, BackColor = Tema.Panel, Padding = new Padding(16, 14, 16, 14), Margin = new Padding(0, 0, 12, 12) };
         card.Controls.Add(inner);
         return card;
     }

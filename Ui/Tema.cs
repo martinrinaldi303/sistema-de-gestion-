@@ -136,16 +136,11 @@ public static class Tema
             _iconoBuscado = true;
             try
             {
+                // Sólo el logo del negocio; si no hay, el ícono genérico de .NET (sin marca fija).
                 if (Marca.Logo is { } logo)
                 {
                     using var bmp = new Bitmap(logo, 64, 64);
                     _icono = Icon.FromHandle(bmp.GetHicon());
-                }
-                else
-                {
-                    using var s = typeof(Tema).Assembly
-                        .GetManifestResourceStream("RetroGreenGestion.Assets.retro-green.ico");
-                    if (s is not null) _icono = new Icon(s);
                 }
             }
             catch { _icono = null; }

@@ -129,7 +129,7 @@ public sealed class FrmTurnos : Form
     // ------------------------------------------------------------- helpers UI
     private static FlowLayoutPanel Pila(string titulo)
     {
-        var tl = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = Tema.Panel };
+        var tl = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = Tema.Panel };
         tl.Controls.Add(new Label { Text = titulo, Font = Tema.Titulo(10f), ForeColor = Tema.Verde, AutoSize = true, Margin = new Padding(0, 0, 0, 6) });
         return tl;
     }
@@ -141,7 +141,7 @@ public sealed class FrmTurnos : Form
     }
     private static Control Card(Control inner, int ancho)
     {
-        var card = new PanelRedondo { AutoSize = true, Radio = 14, ColorBorde = Tema.Borde, AccentoVerde = true, BackColor = Tema.Panel, Padding = new Padding(16, 14, 16, 14), Margin = new Padding(0, 14, 12, 0), MaximumSize = new Size(ancho + 40, 0) };
+        var card = new PanelRedondo { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Radio = 14, ColorBorde = Tema.Borde, AccentoVerde = true, BackColor = Tema.Panel, Padding = new Padding(16, 14, 16, 14), Margin = new Padding(0, 14, 12, 0), MaximumSize = new Size(ancho + 40, 0) };
         card.Controls.Add(inner);
         return card;
     }
