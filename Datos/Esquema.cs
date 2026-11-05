@@ -150,4 +150,73 @@ CREATE TABLE IF NOT EXISTS EnviosDiarios (
   enviado_el    TEXT                              -- cuando quedo 'enviado'
 );
 """";
+
+    /// <summary>
+    /// Módulo de stock (agregado). Atado a las ventas: vender un producto descuenta
+    /// stock y suma a la caja (VentasProducto es un ingreso más, como el libro diario).
+    /// </summary>
+    public const string SqlStock = """"
+CREATE TABLE IF NOT EXISTS Productos (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  nombre            TEXT    NOT NULL UNIQUE,
+  codigo            TEXT,
+  precio_venta_cent INTEGER NOT NULL DEFAULT 0,
+  costo_cent        INTEGER NOT NULL DEFAULT 0,
+  stock_actual      INTEGER NOT NULL DEFAULT 0,
+  stock_minimo      INTEGER NOT NULL DEFAULT 0,
+  activo            INTEGER NOT NULL DEFAULT 1
+);
+
+-- Cada cambio de stock queda registrado. 'cantidad' es el delta con signo
+-- (entrada +, salida/venta -, ajuste +/-). stock_actual se actualiza en la misma transaccion.
+CREATE TABLE IF NOT EXISTS MovimientosStock (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  fecha        TEXT    NOT NULL,                  -- 'AAAA-MM-DD'
+  producto_id  INTEGER NOT NULL REFERENCES Productos(id),
+  tipo         TEXT    NOT NULL,                  -- 'entrada' | 'salida' | 'ajuste' | 'venta'
+  cantidad     INTEGER NOT NULL,                  -- delta con signo
+  motivo       TEXT,
+  referencia   TEXT,                              -- id de venta/servicio si aplica
+  cargado_por  TEXT    NOT NULL,
+  cargado_el   TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_movstock_prod ON MovimientosStock(producto_id, fecha);
+
+-- La venta de un producto: ingreso para la caja (igual que un servicio) y, a la par,
+-- un movimiento de salida de stock.
+CREATE TABLE IF NOT EXISTS VentasProducto (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  fecha         TEXT    NOT NULL,                 -- 'AAAA-MM-DD'
+  periodo       TEXT    NOT NULL,                 -- 'AAAA-MM'
+  producto_id   INTEGER NOT NULL REFERENCES Productos(id),
+  descripcion   TEXT    NOT NULL,                 -- nombre del producto, congelado
+  cantidad      INTEGER NOT NULL,
+  precio_cent   INTEGER NOT NULL,                 -- total de la venta (centavos)
+  medio_pago_id INTEGER NOT NULL REFERENCES MediosPago(id),
+  cargado_por   TEXT    NOT NULL,
+  cargado_el    TEXT    NOT NULL,
+  anulado       INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_ventasprod_periodo ON VentasProducto(periodo, fecha);
+"""";
+
+    /// <summary>Módulo de turnos (agenda). Conectado al libro diario: un turno atendido
+    /// se puede registrar como servicio.</summary>
+    public const string SqlTurnos = """"
+CREATE TABLE IF NOT EXISTS Turnos (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  fecha         TEXT    NOT NULL,                 -- 'AAAA-MM-DD'
+  hora          TEXT    NOT NULL,                 -- 'HH:mm'
+  cliente       TEXT,
+  profesional_id INTEGER REFERENCES Profesionales(id),
+  servicio_id   INTEGER REFERENCES Servicios(id),
+  duracion_min  INTEGER NOT NULL DEFAULT 30,
+  estado        TEXT    NOT NULL DEFAULT 'pendiente', -- pendiente|atendido|cancelado|ausente
+  nota          TEXT,
+  servicio_registrado INTEGER NOT NULL DEFAULT 0,  -- si ya se pasó al libro diario
+  cargado_por   TEXT    NOT NULL,
+  cargado_el    TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_turnos_fecha ON Turnos(fecha, hora);
+"""";
 }

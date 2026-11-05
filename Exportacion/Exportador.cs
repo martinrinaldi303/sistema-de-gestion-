@@ -59,6 +59,10 @@ public static class Exportador
         Hoja(libro, "Libro Diario", servicios, "Precio");
         Hoja(libro, "Egresos", egresos, "Monto");
 
+        // ------------------------------------------------------- Productos vendidos
+        var ventasProd = Repo.ListarVentasProducto(periodo);
+        if (ventasProd.Rows.Count > 0) Hoja(libro, "Productos vendidos", ventasProd, "Total");
+
         // ----------------------------------------------------------- Historico
         var hist = Repo.Historico();
         if (hist.Rows.Count > 0) Hoja(libro, "Histórico mensual", hist, "Ingresos", "Egresos", "Neto");
@@ -83,7 +87,9 @@ public static class Exportador
             if (servicios.Columns.Contains(col)) servicios.Columns.Remove(col);
         var egresos = Repo.ListarEgresosRango(dia, dia);
 
-        var (cant, ingresosCent) = Repo.ServiciosDia(dia);
+        var (cant, ingServicios) = Repo.ServiciosDia(dia);
+        var (_, ingProductos) = Repo.VentasProductoDia(dia);
+        var ingresosCent = ingServicios + ingProductos;
         var egresosCent = Repo.EgresosDia(dia);
         var netoCent = ingresosCent - egresosCent;
 

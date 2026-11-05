@@ -522,7 +522,12 @@ public static class Bd
     /// (CREATE TABLE IF NOT EXISTS), asi que correrlo en cada apertura no molesta:
     /// una base vieja recibe las tablas nuevas y una nueva no cambia.
     /// </summary>
-    private static void Migrar(SqliteConnection cn) => Ejecutar(cn, Esquema.SqlReportes);
+    private static void Migrar(SqliteConnection cn)
+    {
+        Ejecutar(cn, Esquema.SqlReportes);
+        Ejecutar(cn, Esquema.SqlStock);
+        Ejecutar(cn, Esquema.SqlTurnos);
+    }
 
     private static object? Escalar(SqliteConnection cn, string sql)
     {

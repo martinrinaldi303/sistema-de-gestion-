@@ -88,6 +88,7 @@ public sealed class FrmPrincipal : Form
         // Operación diaria: la ve todo el mundo.
         Opcion("Servicios del día", () => new FrmServicios());
         Opcion("Egresos", () => new FrmEgresos());
+        Opcion("Stock", () => new FrmStock());
         Opcion("Clientes", () => new FrmClientes());
         Opcion("Resumen mensual", () => new FrmResumen());
         Opcion("Asistente", () => new FrmAsistente());

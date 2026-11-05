@@ -37,9 +37,10 @@ public sealed class ReporteDiario
     /// <summary>Arma el reporte leyendo los números del día desde la base.</summary>
     public static ReporteDiario DeLaBase(DateTime dia)
     {
-        var (cant, ingresos) = Repo.ServiciosDia(dia);
+        var (cant, ingServicios) = Repo.ServiciosDia(dia);
+        var (_, ingProductos) = Repo.VentasProductoDia(dia);   // las ventas de producto entran a la caja
         var egresos = Repo.EgresosDia(dia);
-        return new ReporteDiario(dia, ingresos, egresos, cant,
+        return new ReporteDiario(dia, ingServicios + ingProductos, egresos, cant,
             Repo.PorProfesionalDia(dia), Repo.PorMedioPagoDia(dia), Repo.PorCategoriaDia(dia));
     }
 

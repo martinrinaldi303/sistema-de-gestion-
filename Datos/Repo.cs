@@ -233,6 +233,7 @@ public static class Repo
         var dt = Bd.Tabla(@"
             SELECT periodo FROM LibroDiario WHERE anulado = 0
             UNION SELECT periodo FROM Egresos WHERE anulado = 0
+            UNION SELECT periodo FROM VentasProducto WHERE anulado = 0
             UNION SELECT periodo FROM ResumenMensual
             ORDER BY periodo DESC;");
         var lista = dt.Rows.Cast<DataRow>().Select(r => r["periodo"].ToString()!).ToList();
@@ -259,7 +260,12 @@ public static class Repo
             "SELECT COUNT(*) FROM LibroDiario WHERE anulado = 0 AND periodo = $p;",
             ("$p", periodo));
 
-        if (cant == 0 && egr == 0 && cerrado.Rows.Count == 1)
+        // Las ventas de producto también entran a la caja (ingreso).
+        var ventas = VentasProductoPeriodoCent(periodo);
+        var ventasCant = (int)Bd.EscalarLong(
+            "SELECT COUNT(*) FROM VentasProducto WHERE anulado = 0 AND periodo = $p;", ("$p", periodo));
+
+        if (cant == 0 && egr == 0 && ventasCant == 0 && cerrado.Rows.Count == 1)
         {
             var r = cerrado.Rows[0];
             return new TotalesMes(
@@ -267,7 +273,7 @@ public static class Repo
                 Convert.ToInt64(r["egresos_cent"]),
                 Convert.ToInt32(r["cant_servicios"]));
         }
-        return new TotalesMes(ing, egr, cant);
+        return new TotalesMes(ing + ventas, egr, cant);
     }
 
     public static DataTable PorProfesional(string periodo)
@@ -308,9 +314,11 @@ public static class Repo
         var desde = Dia(DateTime.Today.AddDays(-6));
         var ing = Bd.EscalarLong(
             "SELECT IFNULL(SUM(precio_cent),0) FROM LibroDiario WHERE anulado = 0 AND fecha >= $d;", ("$d", desde));
+        var ventas = Bd.EscalarLong(
+            "SELECT IFNULL(SUM(precio_cent),0) FROM VentasProducto WHERE anulado = 0 AND fecha >= $d;", ("$d", desde));
         var egr = Bd.EscalarLong(
             "SELECT IFNULL(SUM(monto_cent),0) FROM Egresos WHERE anulado = 0 AND fecha >= $d;", ("$d", desde));
-        return (ing, egr);
+        return (ing + ventas, egr);
     }
 
     /// <summary>El servicio mas pedido del mes: nombre y cuantas veces. null si no hay.</summary>
@@ -324,10 +332,14 @@ public static class Repo
 
     public static DataTable PorMedioPago(string periodo)
     {
+        // Incluye servicios (libro diario) y ventas de producto, ambos pagos a la caja.
         var vivo = Bd.Tabla(@"
-            SELECT m.nombre AS ""Medio de pago"", SUM(l.precio_cent)/100.0 AS Total
-            FROM LibroDiario l JOIN MediosPago m ON m.id = l.medio_pago_id
-            WHERE l.anulado = 0 AND l.periodo = $p
+            SELECT m.nombre AS ""Medio de pago"", SUM(t.cent)/100.0 AS Total
+            FROM (
+                SELECT medio_pago_id AS mid, precio_cent AS cent FROM LibroDiario   WHERE anulado = 0 AND periodo = $p
+                UNION ALL
+                SELECT medio_pago_id,       precio_cent        FROM VentasProducto WHERE anulado = 0 AND periodo = $p
+            ) t JOIN MediosPago m ON m.id = t.mid
             GROUP BY m.id, m.nombre ORDER BY Total DESC;", ("$p", periodo));
 
         if (vivo.Rows.Count > 0) return vivo;
@@ -418,6 +430,9 @@ public static class Repo
                 UNION ALL
                 SELECT periodo, 0, SUM(monto_cent), 0
                 FROM Egresos WHERE anulado = 0 GROUP BY periodo
+                UNION ALL
+                SELECT periodo, SUM(precio_cent), 0, 0
+                FROM VentasProducto WHERE anulado = 0 GROUP BY periodo
             ),
             v AS (SELECT periodo, SUM(ing) AS ing, SUM(egr) AS egr, SUM(cant) AS cant
                   FROM vivo GROUP BY periodo)
@@ -499,9 +514,12 @@ public static class Repo
         Bd.Ejecutar("DELETE FROM ResumenMedioPago WHERE periodo = $p;", ("$p", periodo));
         Bd.Ejecutar(@"
             INSERT INTO ResumenMedioPago (periodo, medio_pago, total_cent)
-            SELECT $p, m.nombre, SUM(l.precio_cent)
-            FROM LibroDiario l JOIN MediosPago m ON m.id = l.medio_pago_id
-            WHERE l.anulado = 0 AND l.periodo = $p
+            SELECT $p, m.nombre, SUM(t.cent)
+            FROM (
+                SELECT medio_pago_id AS mid, precio_cent AS cent FROM LibroDiario   WHERE anulado = 0 AND periodo = $p
+                UNION ALL
+                SELECT medio_pago_id,       precio_cent        FROM VentasProducto WHERE anulado = 0 AND periodo = $p
+            ) t JOIN MediosPago m ON m.id = t.mid
             GROUP BY m.id, m.nombre;", ("$p", periodo));
 
         Bd.Ejecutar("DELETE FROM ResumenGasto WHERE periodo = $p;", ("$p", periodo));
@@ -520,6 +538,7 @@ public static class Repo
         using var tx = cn.BeginTransaction();
         Bd.Ejecutar(cn, "DELETE FROM LibroDiario WHERE periodo = $p;", ("$p", periodo));
         Bd.Ejecutar(cn, "DELETE FROM Egresos WHERE periodo = $p;", ("$p", periodo));
+        Bd.Ejecutar(cn, "DELETE FROM VentasProducto WHERE periodo = $p;", ("$p", periodo));
         tx.Commit();
     }
 
@@ -543,9 +562,145 @@ public static class Repo
             SELECT DISTINCT periodo FROM (
                 SELECT periodo FROM LibroDiario WHERE anulado = 0
                 UNION SELECT periodo FROM Egresos WHERE anulado = 0
+                UNION SELECT periodo FROM VentasProducto WHERE anulado = 0
             ) WHERE periodo < $actual
               AND periodo NOT IN (SELECT periodo FROM Exportaciones)
             ORDER BY periodo;", ("$actual", actual));
         return dt.Rows.Cast<DataRow>().Select(r => r["periodo"].ToString()!).ToList();
+    }
+
+    // ===================================================== stock y productos
+
+    /// <summary>Un producto para el combo de venta (id, nombre, precio y stock).</summary>
+    public sealed record ProductoVenta(long Id, string Nombre, long PrecioVentaCent, long StockActual);
+
+    public static List<ProductoVenta> ProductosActivos()
+        => Bd.Tabla("SELECT id, nombre, precio_venta_cent, stock_actual FROM Productos WHERE activo = 1 ORDER BY nombre;")
+            .Rows.Cast<DataRow>()
+            .Select(r => new ProductoVenta(
+                Convert.ToInt64(r["id"]), r["nombre"].ToString()!,
+                Convert.ToInt64(r["precio_venta_cent"]), Convert.ToInt64(r["stock_actual"])))
+            .ToList();
+
+    public static DataTable ListarProductos()
+        => Bd.Tabla(@"
+            SELECT id                      AS Id,
+                   nombre                  AS Producto,
+                   IFNULL(codigo,'')       AS Código,
+                   precio_venta_cent/100.0 AS Precio,
+                   costo_cent/100.0        AS Costo,
+                   stock_actual            AS Stock,
+                   stock_minimo            AS Mínimo
+            FROM Productos WHERE activo = 1 ORDER BY nombre;");
+
+    /// <summary>Alta de producto. El stock arranca en 0 y, si hay inicial, se carga como movimiento.</summary>
+    public static long AgregarProducto(string nombre, string codigo, long precioVentaCent,
+        long costoCent, long stockInicial, long stockMinimo)
+    {
+        Bd.Ejecutar(@"
+            INSERT INTO Productos (nombre, codigo, precio_venta_cent, costo_cent, stock_actual, stock_minimo)
+            VALUES ($n, $cod, $pv, $co, 0, $min)
+            ON CONFLICT(nombre) DO UPDATE SET activo = 1, codigo = $cod,
+                precio_venta_cent = $pv, costo_cent = $co, stock_minimo = $min;",
+            ("$n", nombre.Trim()), ("$cod", codigo), ("$pv", precioVentaCent),
+            ("$co", costoCent), ("$min", stockMinimo));
+        var id = Bd.EscalarLong("SELECT id FROM Productos WHERE nombre = $n;", ("$n", nombre.Trim()));
+        if (stockInicial != 0)
+            RegistrarMovimiento(id, stockInicial > 0 ? "entrada" : "ajuste", stockInicial, "stock inicial");
+        return id;
+    }
+
+    public static void EditarProducto(long id, string nombre, string codigo,
+        long precioVentaCent, long costoCent, long stockMinimo)
+        => Bd.Ejecutar(@"
+            UPDATE Productos SET nombre = $n, codigo = $cod, precio_venta_cent = $pv,
+                   costo_cent = $co, stock_minimo = $min WHERE id = $id;",
+            ("$n", nombre.Trim()), ("$cod", codigo), ("$pv", precioVentaCent),
+            ("$co", costoCent), ("$min", stockMinimo), ("$id", id));
+
+    /// <summary>No se borra: se desactiva (conserva el histórico de movimientos y ventas).</summary>
+    public static void DesactivarProducto(long id)
+        => Bd.Ejecutar("UPDATE Productos SET activo = 0 WHERE id = $id;", ("$id", id));
+
+    /// <summary>Registra un movimiento (delta con signo) y actualiza el stock en la misma transacción.</summary>
+    public static void RegistrarMovimiento(long productoId, string tipo, long deltaConSigno,
+        string motivo = "", string referencia = "")
+    {
+        using var cn = Bd.Conectar();
+        using var tx = cn.BeginTransaction();
+        Bd.Ejecutar(cn, @"
+            INSERT INTO MovimientosStock (fecha, producto_id, tipo, cantidad, motivo, referencia, cargado_por, cargado_el)
+            VALUES ($f, $p, $t, $c, $m, $r, $u, $e);",
+            ("$f", Dia(DateTime.Today)), ("$p", productoId), ("$t", tipo), ("$c", deltaConSigno),
+            ("$m", motivo), ("$r", referencia), ("$u", Bd.Usuario), ("$e", DateTime.Now.ToString("s")));
+        Bd.Ejecutar(cn, "UPDATE Productos SET stock_actual = stock_actual + $c WHERE id = $p;",
+            ("$c", deltaConSigno), ("$p", productoId));
+        tx.Commit();
+    }
+
+    /// <summary>Vende un producto: lo suma a la caja (ingreso) y descuenta stock, todo junto.</summary>
+    public static void RegistrarVentaProducto(long productoId, long cantidad, long precioTotalCent, long medioPagoId)
+    {
+        var nombre = Bd.Escalar("SELECT nombre FROM Productos WHERE id = $id;", ("$id", productoId))?.ToString() ?? "Producto";
+        var fecha = Dia(DateTime.Today);
+        using var cn = Bd.Conectar();
+        using var tx = cn.BeginTransaction();
+        Bd.Ejecutar(cn, @"
+            INSERT INTO VentasProducto
+                (fecha, periodo, producto_id, descripcion, cantidad, precio_cent, medio_pago_id, cargado_por, cargado_el)
+            VALUES ($f, $per, $p, $d, $cant, $precio, $medio, $u, $e);",
+            ("$f", fecha), ("$per", Periodo(DateTime.Today)), ("$p", productoId), ("$d", nombre),
+            ("$cant", cantidad), ("$precio", precioTotalCent), ("$medio", medioPagoId),
+            ("$u", Bd.Usuario), ("$e", DateTime.Now.ToString("s")));
+        var ventaId = Convert.ToInt64(Bd.Tabla(cn, "SELECT last_insert_rowid() AS id;").Rows[0]["id"]);
+        Bd.Ejecutar(cn, @"
+            INSERT INTO MovimientosStock (fecha, producto_id, tipo, cantidad, motivo, referencia, cargado_por, cargado_el)
+            VALUES ($f, $p, 'venta', $c, 'venta', $r, $u, $e);",
+            ("$f", fecha), ("$p", productoId), ("$c", -cantidad), ("$r", ventaId.ToString()),
+            ("$u", Bd.Usuario), ("$e", DateTime.Now.ToString("s")));
+        Bd.Ejecutar(cn, "UPDATE Productos SET stock_actual = stock_actual - $c WHERE id = $p;",
+            ("$c", cantidad), ("$p", productoId));
+        tx.Commit();
+    }
+
+    public static DataTable ProductosBajoMinimo()
+        => Bd.Tabla(@"
+            SELECT nombre AS Producto, stock_actual AS Stock, stock_minimo AS Mínimo
+            FROM Productos
+            WHERE activo = 1 AND stock_minimo > 0 AND stock_actual <= stock_minimo
+            ORDER BY (stock_actual - stock_minimo), nombre;");
+
+    public static long ValorInventarioCent()
+        => Bd.EscalarLong("SELECT IFNULL(SUM(stock_actual * costo_cent), 0) FROM Productos WHERE activo = 1;");
+
+    public static DataTable MovimientosProducto(long productoId, int cuantos = 60)
+        => Bd.Tabla(@"
+            SELECT fecha AS Fecha, tipo AS Tipo, cantidad AS Cantidad, IFNULL(motivo,'') AS Motivo
+            FROM MovimientosStock WHERE producto_id = $id ORDER BY id DESC LIMIT $n;",
+            ("$id", productoId), ("$n", cuantos));
+
+    public static DataTable ListarVentasProducto(string periodo)
+        => Bd.Tabla(@"
+            SELECT v.fecha            AS Fecha,
+                   v.descripcion      AS Producto,
+                   v.cantidad         AS Cantidad,
+                   v.precio_cent/100.0 AS Total,
+                   m.nombre           AS ""Medio de pago""
+            FROM VentasProducto v JOIN MediosPago m ON m.id = v.medio_pago_id
+            WHERE v.anulado = 0 AND v.periodo = $p
+            ORDER BY v.fecha DESC, v.id DESC;", ("$p", periodo));
+
+    /// <summary>Ingreso de ventas de producto del mes (para sumarlo a la caja).</summary>
+    public static long VentasProductoPeriodoCent(string periodo)
+        => Bd.EscalarLong("SELECT IFNULL(SUM(precio_cent),0) FROM VentasProducto WHERE anulado = 0 AND periodo = $p;",
+            ("$p", periodo));
+
+    /// <summary>Cantidad e ingreso de ventas de producto de un día.</summary>
+    public static (int cant, long ingresosCent) VentasProductoDia(DateTime dia)
+    {
+        var d = Dia(dia);
+        var cant = (int)Bd.EscalarLong("SELECT COUNT(*) FROM VentasProducto WHERE anulado = 0 AND fecha = $d;", ("$d", d));
+        var ing = Bd.EscalarLong("SELECT IFNULL(SUM(precio_cent),0) FROM VentasProducto WHERE anulado = 0 AND fecha = $d;", ("$d", d));
+        return (cant, ing);
     }
 }
