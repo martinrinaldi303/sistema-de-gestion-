@@ -10,8 +10,9 @@
     <RootNamespace>RetroGreenGestion</RootNamespace>
     <AssemblyName>RetroGreenGestion</AssemblyName>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-    <!-- Producto white-label: sin marca fija. El ícono de ventana sale del logo que
-         carga cada negocio (Personalización); el .exe usa el ícono genérico de .NET. -->
+    <!-- Logo por defecto del producto (neutro). Cada negocio puede poner el suyo en
+         Personalización; mientras tanto se ve este. -->
+    <ApplicationIcon>Assets\app-logo.ico</ApplicationIcon>
     <Product>Gestión</Product>
     <AssemblyTitle>Gestión</AssemblyTitle>
     <Company>Gestión</Company>
@@ -38,6 +39,12 @@
     <!-- El proyecto de tests vive en Tests\ (subcarpeta): sus .cs son de ESE proyecto,
          no de este. Sin esto, el SDK los tomaría acá por el glob **/*.cs. -->
     <Compile Remove="Tests\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Logo por defecto del producto, embebido (se muestra cuando el negocio no cargó el suyo). -->
+    <EmbeddedResource Include="Assets\app-logo.png" />
+    <EmbeddedResource Include="Assets\app-logo.ico" />
   </ItemGroup>
 
 </Project>

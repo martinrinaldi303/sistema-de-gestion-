@@ -707,11 +707,11 @@ public static class Repo
     // ========================================================== turnos (agenda)
 
     public static void AgregarTurno(DateTime fecha, string hora, string cliente, string clienteEmail,
-        long? profesionalId, long? servicioId, int duracionMin, string nota)
+        long? profesionalId, long? servicioId, int duracionMin, string nota, string clienteTelefono = "")
         => Bd.Ejecutar(@"
-            INSERT INTO Turnos (fecha, hora, cliente, cliente_email, profesional_id, servicio_id, duracion_min, estado, nota, cargado_por, cargado_el)
-            VALUES ($f, $h, $cli, $mail, $prof, $serv, $dur, 'pendiente', $nota, $u, $e);",
-            ("$f", Dia(fecha)), ("$h", hora), ("$cli", cliente), ("$mail", clienteEmail),
+            INSERT INTO Turnos (fecha, hora, cliente, cliente_email, cliente_telefono, profesional_id, servicio_id, duracion_min, estado, nota, cargado_por, cargado_el)
+            VALUES ($f, $h, $cli, $mail, $tel, $prof, $serv, $dur, 'pendiente', $nota, $u, $e);",
+            ("$f", Dia(fecha)), ("$h", hora), ("$cli", cliente), ("$mail", clienteEmail), ("$tel", clienteTelefono),
             ("$prof", profesionalId), ("$serv", servicioId), ("$dur", duracionMin),
             ("$nota", nota), ("$u", Bd.Usuario), ("$e", DateTime.Now.ToString("s")));
 
@@ -751,6 +751,7 @@ public static class Repo
                    IFNULL(p.nombre,'')    AS Profesional,
                    IFNULL(s.nombre,'')    AS Servicio,
                    t.estado          AS Estado,
+                   IFNULL(t.cliente_telefono,'') AS Telefono,
                    IFNULL(t.nota,'')      AS Nota
             FROM Turnos t
             LEFT JOIN Profesionales p ON p.id = t.profesional_id

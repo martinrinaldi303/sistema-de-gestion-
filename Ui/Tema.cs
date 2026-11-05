@@ -136,11 +136,16 @@ public static class Tema
             _iconoBuscado = true;
             try
             {
-                // Sólo el logo del negocio; si no hay, el ícono genérico de .NET (sin marca fija).
+                // El logo del negocio si lo cargó; si no, el ícono default del producto.
                 if (Marca.Logo is { } logo)
                 {
                     using var bmp = new Bitmap(logo, 64, 64);
                     _icono = Icon.FromHandle(bmp.GetHicon());
+                }
+                else
+                {
+                    using var s = typeof(Tema).Assembly.GetManifestResourceStream("RetroGreenGestion.Assets.app-logo.ico");
+                    if (s is not null) _icono = new Icon(s);
                 }
             }
             catch { _icono = null; }
@@ -506,8 +511,28 @@ public static class Tema
 
     // ------------------------------------------------------------------ logo
 
-    /// <summary>El logo del negocio (lo carga cada negocio desde Personalización). null si no hay.</summary>
-    public static Image? Logo => Marca.Logo;
+    /// <summary>El logo a mostrar: el del negocio (Personalización) o el default del producto.</summary>
+    public static Image? Logo => Marca.Logo ?? LogoDefault;
+
+    private static Image? _logoDef;
+    private static bool _logoDefBuscado;
+
+    /// <summary>Logo por defecto del producto (neutro), embebido en el .exe.</summary>
+    public static Image? LogoDefault
+    {
+        get
+        {
+            if (_logoDefBuscado) return _logoDef;
+            _logoDefBuscado = true;
+            try
+            {
+                using var s = typeof(Tema).Assembly.GetManifestResourceStream("RetroGreenGestion.Assets.app-logo.png");
+                if (s is not null) { using var tmp = Image.FromStream(s); _logoDef = new Bitmap(tmp); }
+            }
+            catch { _logoDef = null; }
+            return _logoDef;
+        }
+    }
 
     /// <summary>Pone el logo como adorno fijo arriba a la derecha del formulario.</summary>
     public static PictureBox? AdornoLogo(Form f, int tam = 52, int margen = 12)

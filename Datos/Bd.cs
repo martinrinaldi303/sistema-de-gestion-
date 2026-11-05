@@ -529,6 +529,7 @@ public static class Bd
         Ejecutar(cn, Esquema.SqlTurnos);
         // Columnas agregadas a tablas que ya podían existir (el CREATE no las agrega).
         AgregarColumnaSiFalta(cn, "Turnos", "cliente_email", "TEXT");
+        AgregarColumnaSiFalta(cn, "Turnos", "cliente_telefono", "TEXT");
         AgregarColumnaSiFalta(cn, "Turnos", "recordatorio_enviado", "INTEGER NOT NULL DEFAULT 0");
     }
 

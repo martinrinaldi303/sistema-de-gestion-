@@ -1,4 +1,6 @@
 using System.Data;
+using System.Diagnostics;
+using System.Globalization;
 using RetroGreenGestion.Datos;
 using RetroGreenGestion.Reportes;
 
@@ -16,7 +18,8 @@ public sealed class FrmTurnos : Form
         Format = DateTimePickerFormat.Custom, CustomFormat = "HH:mm", ShowUpDown = true, Width = 80, Font = Tema.Normal(10f)
     };
     private readonly TextBox _cliente = Tema.Caja(180);
-    private readonly TextBox _clienteEmail = Tema.Caja(200);
+    private readonly TextBox _clienteEmail = Tema.Caja(190);
+    private readonly TextBox _clienteTel = Tema.Caja(150);
     private readonly ComboBox _prof = Tema.Combo(160);
     private readonly ComboBox _serv = Tema.Combo(180);
     private readonly TextBox _duracion = Tema.Caja(70);
@@ -84,6 +87,8 @@ public sealed class FrmTurnos : Form
         campos.Controls.Add(Tema.Campo("Hora", _hora));
         campos.Controls.Add(Tema.Campo("Cliente", _cliente));
         campos.Controls.Add(Tema.Campo("Email cliente", _clienteEmail));
+        _clienteTel.PlaceholderText = "549351...";
+        campos.Controls.Add(Tema.Campo("Tel. WhatsApp", _clienteTel));
         campos.Controls.Add(Tema.Campo("Profesional", _prof));
         campos.Controls.Add(Tema.Campo("Servicio", _serv));
         campos.Controls.Add(Tema.Campo("Duración (min)", _duracion));
@@ -103,6 +108,10 @@ public sealed class FrmTurnos : Form
         var ausente = Tema.Boton("Ausente"); ausente.Width = 100; ausente.Click += (s, e) => Estado("ausente");
         var cancelar = Tema.BotonPeligro("Cancelar"); cancelar.Width = 110; cancelar.Click += (s, e) => Estado("cancelado");
         tl.Controls.Add(Fila(atendido, ausente, cancelar));
+
+        var whatsapp = Tema.Boton("Avisar por WhatsApp", primario: true); whatsapp.Width = 230;
+        whatsapp.Click += (s, e) => Whatsapp();
+        tl.Controls.Add(Fila(whatsapp));
 
         var campos = new FlowLayoutPanel { AutoSize = true, WrapContents = true, BackColor = Tema.Panel, MaximumSize = new Size(320, 0), Margin = new Padding(0, 6, 0, 0) };
         _precio.PlaceholderText = "0";
@@ -163,14 +172,14 @@ public sealed class FrmTurnos : Form
     private void RecargarDia()
     {
         _grilla.DataSource = Repo.TurnosDia(_diaVer.Value.Date);
-        if (_grilla.Columns["Id"] is { } col) col.Visible = false;
-        if (_grilla.Columns["Fecha"] is { } f) f.Visible = false;
+        foreach (var c in new[] { "Id", "Fecha", "Telefono" })
+            if (_grilla.Columns[c] is { } col) col.Visible = false;
     }
 
     private void RecargarProximos()
     {
         _proximos.DataSource = Repo.ProximosTurnos();
-        foreach (var c in new[] { "Id", "Nota", "Estado" })
+        foreach (var c in new[] { "Id", "Nota", "Estado", "Telefono" })
             if (_proximos.Columns[c] is { } col) col.Visible = false;
     }
 
@@ -185,8 +194,8 @@ public sealed class FrmTurnos : Form
         try
         {
             Repo.AgregarTurno(_fecha.Value.Date, _hora.Value.ToString("HH:mm"), _cliente.Text.Trim(),
-                _clienteEmail.Text.Trim(), ProfId(), ServId(), dur, _nota.Text.Trim());
-            _cliente.Clear(); _clienteEmail.Clear(); _nota.Clear();
+                _clienteEmail.Text.Trim(), ProfId(), ServId(), dur, _nota.Text.Trim(), _clienteTel.Text.Trim());
+            _cliente.Clear(); _clienteEmail.Clear(); _clienteTel.Clear(); _nota.Clear();
             if (_fecha.Value.Date == _diaVer.Value.Date) RecargarDia();
             RecargarProximos();
         }
@@ -223,6 +232,34 @@ public sealed class FrmTurnos : Form
         }
         catch (Exception ex) { Tema.Error("No se pudo registrar.\n\n" + ex.Message); }
     }
+
+    /// <summary>Abre WhatsApp (wa.me) con el mensaje del recordatorio ya escrito, para el turno elegido.</summary>
+    private void Whatsapp()
+    {
+        if (_grilla.CurrentRow is not { } row || IdSeleccionado() is null) { Tema.Error("Elegí un turno de la agenda."); return; }
+        var tel = new string((row.Cells["Telefono"].Value?.ToString() ?? "").Where(char.IsDigit).ToArray());
+        if (tel.Length < 8)
+        {
+            Tema.Error("El turno no tiene un teléfono válido para WhatsApp.\n" +
+                       "Cargalo con código de país y sin signos (ej. 5493511234567).");
+            return;
+        }
+        var cliente = row.Cells["Cliente"].Value?.ToString() ?? "";
+        var hora = row.Cells["Hora"].Value?.ToString() ?? "";
+        var fecha = FechaLinda(row.Cells["Fecha"].Value?.ToString() ?? "");
+        var texto = ConfigRecordatorios.Cargar().Texto
+            .Replace("{cliente}", cliente).Replace("{fecha}", fecha).Replace("{hora}", hora).Replace("{negocio}", Marca.Nombre);
+        try
+        {
+            var url = $"https://wa.me/{tel}?text={Uri.EscapeDataString(texto)}";
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex) { Tema.Error("No se pudo abrir WhatsApp.\n\n" + ex.Message); }
+    }
+
+    private static string FechaLinda(string iso)
+        => DateTime.TryParseExact(iso, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var f)
+            ? f.ToString("dd/MM/yyyy") : iso;
 
     // ------------------------------------------------- bot de recordatorios (admin)
 
