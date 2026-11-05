@@ -1,5 +1,6 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
+using RetroGreenGestion.Datos;
 
 namespace RetroGreenGestion.Ui;
 
@@ -17,16 +18,18 @@ public static class Tema
     public static readonly Color Superficie  = ColorTranslator.FromHtml("#201F21");  // surface-container (inputs)
     public static readonly Color SuperficieBaja = ColorTranslator.FromHtml("#1B1B1D"); // surface-container-low (cabeceras)
     public static readonly Color Elevada     = ColorTranslator.FromHtml("#1F1F23");  // surface-elevated (hover)
-    public static readonly Color Verde       = ColorTranslator.FromHtml("#4BE277");  // primary (relleno boton / acento)
-    public static readonly Color VerdeFuerte = ColorTranslator.FromHtml("#22C55E");  // primary-container (hover)
-    public static readonly Color VerdeClaro  = ColorTranslator.FromHtml("#6BFF8F");  // primary-fixed (seleccion)
-    public static readonly Color Violeta     = ColorTranslator.FromHtml("#C084FC");  // neon-purple-light
+    // Acentos: cambian con la gama que elige el negocio (ver AplicarAcento / CargarGama).
+    // El fondo oscuro no se toca; sólo el color primario, sus derivados y el secundario.
+    public static Color Verde       { get; private set; } = ColorTranslator.FromHtml("#4BE277");  // primary (acento)
+    public static Color VerdeFuerte { get; private set; } = ColorTranslator.FromHtml("#22C55E");  // hover
+    public static Color VerdeClaro  { get; private set; } = ColorTranslator.FromHtml("#6BFF8F");  // seleccion
+    public static Color Violeta     { get; private set; } = ColorTranslator.FromHtml("#C084FC");  // secundario
     public static readonly Color Apagado     = ColorTranslator.FromHtml("#BCCBB9");  // on-surface-variant
     public static readonly Color Borde       = ColorTranslator.FromHtml("#27272A");  // border-subtle
     public static readonly Color BordeFuerte = ColorTranslator.FromHtml("#3F3F46");  // border-prominent
     public static readonly Color Texto       = ColorTranslator.FromHtml("#E5E1E4");  // on-surface
     public static readonly Color Rojo        = ColorTranslator.FromHtml("#F87171");  // crimson-muted
-    public static readonly Color SobreVerde  = ColorTranslator.FromHtml("#0A0A0A");  // texto sobre botones verdes
+    public static Color SobreVerde  { get; private set; } = ColorTranslator.FromHtml("#0A0A0A");  // texto sobre el acento
 
     // Space Grotesk para titulos / Outfit para texto, con alternativas si el
     // equipo no tiene esas fuentes instaladas (se bajan en la web via Google Fonts).
@@ -48,6 +51,68 @@ public static class Tema
     public static Font Normal(float tam = 9.75f, FontStyle estilo = FontStyle.Regular)
         => new(FamiliaTexto, tam, estilo);
 
+    // ------------------------------------------------------------ gama de colores
+
+    /// <summary>Una gama: color de acento primario y secundario.</summary>
+    public sealed record Gama(string Nombre, string AcentoHex, string SecundarioHex);
+
+    /// <summary>Las gamas que el negocio puede elegir (más, opcional, un acento propio).</summary>
+    public static readonly IReadOnlyList<Gama> Gamas = new[]
+    {
+        new Gama("Verde neón", "#4BE277", "#C084FC"),
+        new Gama("Azul",       "#38BDF8", "#C084FC"),
+        new Gama("Violeta",    "#C084FC", "#4BE277"),
+        new Gama("Naranja",    "#FB923C", "#38BDF8"),
+        new Gama("Coral",      "#F87171", "#FBBF24"),
+        new Gama("Turquesa",   "#2DD4BF", "#C084FC"),
+    };
+
+    private const string KGama = "tema_gama";
+    private const string KAcento = "tema_acento_hex";
+
+    public static string GamaActual => Bd.Config(KGama, Gamas[0].Nombre);
+    public static string? AcentoCustom
+    {
+        get { var h = Bd.Config(KAcento, "").Trim(); return h.Length > 0 ? h : null; }
+    }
+
+    /// <summary>Lee la gama guardada en Config y la aplica. Se llama al arrancar (tras el login).</summary>
+    public static void CargarGama()
+    {
+        try
+        {
+            if (AcentoCustom is { } custom) { AplicarAcento(custom, Gamas[0].SecundarioHex); return; }
+            var g = Gamas.FirstOrDefault(x => x.Nombre == GamaActual) ?? Gamas[0];
+            AplicarAcento(g.AcentoHex, g.SecundarioHex);
+        }
+        catch { /* si algo falla, quedan los colores por defecto */ }
+    }
+
+    /// <summary>Guarda la elección (gama por nombre y, opcional, un acento propio) y la aplica.</summary>
+    public static void GuardarGama(string nombreGama, string? acentoHex)
+    {
+        Bd.GuardarConfig(KGama, nombreGama);
+        Bd.GuardarConfig(KAcento, acentoHex ?? "");
+        CargarGama();
+    }
+
+    private static void AplicarAcento(string acentoHex, string secundarioHex)
+    {
+        var acento = ColorTranslator.FromHtml(acentoHex);
+        Verde = acento;
+        VerdeFuerte = Oscurecer(acento, 0.14);
+        VerdeClaro = Aclarar(acento, 0.22);
+        SobreVerde = Luminancia(acento) > 0.6 ? ColorTranslator.FromHtml("#0A0A0A") : Color.White;
+        try { Violeta = ColorTranslator.FromHtml(secundarioHex); } catch { /* deja el actual */ }
+    }
+
+    private static double Luminancia(Color c) => (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) / 255.0;
+    private static Color Oscurecer(Color c, double f)
+        => Color.FromArgb(c.A, (int)(c.R * (1 - f)), (int)(c.G * (1 - f)), (int)(c.B * (1 - f)));
+    private static Color Aclarar(Color c, double f)
+        => Color.FromArgb(c.A,
+            (int)(c.R + (255 - c.R) * f), (int)(c.G + (255 - c.G) * f), (int)(c.B + (255 - c.B) * f));
+
     // --------------------------------------------------------------- piezas
 
     public static void AplicarA(Form f)
@@ -62,7 +127,7 @@ public static class Tema
     private static Icon? _icono;
     private static bool _iconoBuscado;
 
-    /// <summary>El logo como ícono de ventana (barra de tareas y título). null si no cargó.</summary>
+    /// <summary>Ícono de ventana (barra de tareas y título): el logo del negocio si hay; si no, el genérico embebido.</summary>
     public static Icon? Icono
     {
         get
@@ -71,9 +136,17 @@ public static class Tema
             _iconoBuscado = true;
             try
             {
-                using var s = typeof(Tema).Assembly
-                    .GetManifestResourceStream("RetroGreenGestion.Assets.retro-green.ico");
-                if (s is not null) _icono = new Icon(s);
+                if (Marca.Logo is { } logo)
+                {
+                    using var bmp = new Bitmap(logo, 64, 64);
+                    _icono = Icon.FromHandle(bmp.GetHicon());
+                }
+                else
+                {
+                    using var s = typeof(Tema).Assembly
+                        .GetManifestResourceStream("RetroGreenGestion.Assets.retro-green.ico");
+                    if (s is not null) _icono = new Icon(s);
+                }
             }
             catch { _icono = null; }
             return _icono;
@@ -325,7 +398,7 @@ public static class Tema
         var cab = new Panel { Dock = DockStyle.Fill, BackColor = Fondo, Margin = new Padding(0, 0, 0, 14), Height = 64 };
         cab.Controls.Add(new Label
         {
-            Text = $"RETRO GREEN GESTIÓN   /   {seccion.ToUpperInvariant()}",
+            Text = $"{Marca.Nombre.ToUpperInvariant()}   /   {seccion.ToUpperInvariant()}",
             Font = Normal(8f, FontStyle.Bold),
             ForeColor = Verde,
             AutoSize = true,
@@ -438,30 +511,8 @@ public static class Tema
 
     // ------------------------------------------------------------------ logo
 
-    private static Image? _logo;
-    private static bool _logoBuscado;
-
-    /// <summary>El logo de Retro Green, embebido en el .exe. null si no se pudo cargar.</summary>
-    public static Image? Logo
-    {
-        get
-        {
-            if (_logoBuscado) return _logo;
-            _logoBuscado = true;
-            try
-            {
-                using var s = typeof(Tema).Assembly
-                    .GetManifestResourceStream("RetroGreenGestion.Assets.retro-green.png");
-                if (s is not null)
-                {
-                    using var tmp = Image.FromStream(s);
-                    _logo = new Bitmap(tmp);   // copia propia: no depende del stream
-                }
-            }
-            catch { _logo = null; }
-            return _logo;
-        }
-    }
+    /// <summary>El logo del negocio (lo carga cada negocio desde Personalización). null si no hay.</summary>
+    public static Image? Logo => Marca.Logo;
 
     /// <summary>Pone el logo como adorno fijo arriba a la derecha del formulario.</summary>
     public static PictureBox? AdornoLogo(Form f, int tam = 52, int margen = 12)
@@ -491,11 +542,11 @@ public static class Tema
             BackColor = Color.Transparent
         };
 
-    public static void Aviso(string mensaje, string titulo = "Retro Green")
-        => MessageBox.Show(mensaje, titulo, MessageBoxButtons.OK, MessageBoxIcon.Information);
+    public static void Aviso(string mensaje, string? titulo = null)
+        => MessageBox.Show(mensaje, titulo ?? Marca.Nombre, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-    public static void Error(string mensaje, string titulo = "Retro Green")
-        => MessageBox.Show(mensaje, titulo, MessageBoxButtons.OK, MessageBoxIcon.Error);
+    public static void Error(string mensaje, string? titulo = null)
+        => MessageBox.Show(mensaje, titulo ?? Marca.Nombre, MessageBoxButtons.OK, MessageBoxIcon.Error);
 
     public static bool Confirmar(string mensaje, string titulo = "Confirmar")
         => MessageBox.Show(mensaje, titulo, MessageBoxButtons.YesNo, MessageBoxIcon.Question)

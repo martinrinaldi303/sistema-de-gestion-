@@ -14,6 +14,12 @@ public static class Bd
     private static string _clave = "";
 
     /// <summary>
+    /// Carpeta (bajo Documentos) donde viven la base, el llavero y las copias. Nombre
+    /// neutro a propósito: es un producto para cualquier negocio, no una marca fija.
+    /// </summary>
+    public const string NombreCarpetaDatos = "Gestion Negocio";
+
+    /// <summary>
     /// Solo para pruebas: si se fija, la base y el llavero viven acá en vez de en
     /// Documentos\Retro Green. Permite correr tests contra una base temporal sin
     /// tocar los datos reales. En produccion siempre queda en null.
@@ -26,7 +32,7 @@ public static class Bd
         {
             var c = CarpetaBaseOverride ?? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "Retro Green");
+                NombreCarpetaDatos);
             Directory.CreateDirectory(c);
             return c;
         }
@@ -118,7 +124,7 @@ public static class Bd
     /// Migra una base vieja (clave directa, sin usuarios): esa clave pasa a ser la
     /// del administrador. Devuelve false si la clave es incorrecta.
     /// </summary>
-    public static bool MigrarYEntrar(string clave, string nombreAdmin = "Ezequiel")
+    public static bool MigrarYEntrar(string clave, string nombreAdmin = "Administrador")
     {
         CodigosNuevos = null;
         SqliteConnection.ClearAllPools();
@@ -160,7 +166,7 @@ public static class Bd
         if (!AbrirCon(dek)) return false;
 
         Llavero.MarcarCodigoUsado(indice);                 // un solo uso
-        var admin = Llavero.PrimerAdmin() ?? "Ezequiel";
+        var admin = Llavero.PrimerAdmin() ?? "Administrador";
         Llavero.RecambiarClaveUsuario(admin, dek, nuevaClave);
         Usuario = admin;
         EsAdmin = true;
@@ -525,29 +531,17 @@ public static class Bd
         return cmd.ExecuteScalar();
     }
 
-    /// <summary>Datos iniciales, tomados de la planilla que ya usan.</summary>
+    /// <summary>
+    /// Datos iniciales genéricos para cualquier negocio. NO siembra profesionales ni
+    /// servicios (los carga cada negocio desde Catálogos); el administrador se agrega
+    /// como profesional al crearse. Sólo deja medios de pago y categorías genéricas.
+    /// </summary>
     private static void Sembrar(SqliteConnection cn)
     {
-        foreach (var n in new[] { "Anahí", "Ezequiel", "Pedro" })
-            Ejecutar(cn, "INSERT INTO Profesionales (nombre) VALUES ($n);", ("$n", n));
-
-        var servicios = new (string Nombre, long Cent)[]
-        {
-            ("Corte", 1500000),
-            ("Corte + Barba", 2000000),
-            ("Barba", 800000),
-            ("Color", 4500000),
-            ("Reflejos", 6000000),
-            ("Lavado y peinado", 900000)
-        };
-        foreach (var s in servicios)
-            Ejecutar(cn, "INSERT INTO Servicios (nombre, precio_cent) VALUES ($n, $p);",
-                ("$n", s.Nombre), ("$p", s.Cent));
-
         foreach (var n in new[] { "Efectivo", "Transferencia", "Tarjeta" })
             Ejecutar(cn, "INSERT INTO MediosPago (nombre) VALUES ($n);", ("$n", n));
 
-        var categorias = new[] { "Alquiler", "Supermercado", "Productos y Herramientas", "Mantenimiento Local" };
+        var categorias = new[] { "Alquiler", "Servicios", "Insumos", "Mantenimiento" };
         foreach (var n in categorias)
             Ejecutar(cn, "INSERT INTO CategoriasGasto (nombre) VALUES ($n);", ("$n", n));
 

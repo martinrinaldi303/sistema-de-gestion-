@@ -25,6 +25,9 @@ internal static class Program
         using (var login = new FrmLogin())
             if (login.ShowDialog() != DialogResult.OK) return;
 
+        // Ya con la base abierta: aplicar la gama de colores elegida por el negocio.
+        Tema.CargarGama();
+
         Application.Run(new FrmPrincipal());
     }
 }

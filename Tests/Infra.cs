@@ -42,17 +42,37 @@ public abstract class PruebaConBase : IDisposable
     protected static void AgregarServicio(DateTime fecha, string profesional, string servicio,
         decimal pesos, string medio = "Efectivo", string cliente = "")
     {
-        var prof = Repo.Profesionales().First(p => p.Nombre == profesional);
-        var serv = Repo.Servicios().First(s => s.Nombre == servicio);
-        var med = Repo.MediosPago().First(m => m.Nombre == medio);
-        Repo.AgregarServicio(fecha, prof.Id, serv.Id, serv.Nombre, Bd.ACentavos(pesos), med.Id, cliente, "");
+        var profId = Asegurar("Profesionales", profesional);
+        var servId = Asegurar("Servicios", servicio, "precio_cent", Bd.ACentavos(pesos));
+        var medId = Asegurar("MediosPago", medio);
+        Repo.AgregarServicio(fecha, profId, servId, servicio, Bd.ACentavos(pesos), medId, cliente, "");
     }
 
     protected static void AgregarEgreso(DateTime fecha, string categoria, decimal pesos, string medio = "Efectivo")
     {
-        var cat = Repo.CategoriasGasto().First(c => c.Nombre == categoria);
-        var med = Repo.MediosPago().First(m => m.Nombre == medio);
-        Repo.AgregarEgreso(fecha, cat.Id, "gasto", "", Bd.ACentavos(pesos), med.Id);
+        var catId = Asegurar("CategoriasGasto", categoria);
+        var medId = Asegurar("MediosPago", medio);
+        Repo.AgregarEgreso(fecha, catId, "gasto", "", Bd.ACentavos(pesos), medId);
+    }
+
+    /// <summary>Fija la comisión de un profesional (lo crea si hace falta).</summary>
+    protected static void SetComision(string profesional, double pct)
+    {
+        Asegurar("Profesionales", profesional);
+        Bd.Ejecutar("UPDATE Profesionales SET comision_porcentaje = $p WHERE nombre = $n;",
+            ("$p", pct), ("$n", profesional));
+    }
+
+    // Inserta el ítem de catálogo si no existe (nombre es UNIQUE) y devuelve su id.
+    // Reemplaza a la antigua semilla fija de profesionales/servicios.
+    protected static long Asegurar(string tabla, string nombre, string? colExtra = null, long valExtra = 0)
+    {
+        if (colExtra is null)
+            Bd.Ejecutar($"INSERT INTO {tabla} (nombre) VALUES ($n) ON CONFLICT(nombre) DO NOTHING;", ("$n", nombre));
+        else
+            Bd.Ejecutar($"INSERT INTO {tabla} (nombre, {colExtra}) VALUES ($n, $v) ON CONFLICT(nombre) DO NOTHING;",
+                ("$n", nombre), ("$v", valExtra));
+        return Bd.EscalarLong($"SELECT id FROM {tabla} WHERE nombre = $n;", ("$n", nombre));
     }
 
     protected static ConfigCorreo ConfigDePrueba(bool activo = true, TimeOnly? hora = null, DateTime? desde = null)

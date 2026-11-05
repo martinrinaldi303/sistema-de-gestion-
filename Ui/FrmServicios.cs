@@ -60,7 +60,7 @@ public sealed class FrmServicios : Form
 
         var ruta = new Label
         {
-            Text = "RETRO GREEN GESTIÓN   /   OPERACIONES DIARIAS",
+            Text = $"{Marca.Nombre.ToUpperInvariant()}   /   OPERACIONES DIARIAS",
             Font = Tema.Normal(8f, FontStyle.Bold),
             ForeColor = Tema.Verde,
             AutoSize = true,

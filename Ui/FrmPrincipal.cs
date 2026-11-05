@@ -19,7 +19,7 @@ public sealed class FrmPrincipal : Form
     public FrmPrincipal()
     {
         Tema.AplicarA(this);
-        Text = "Retro Green - Gestión económica";
+        Text = $"{Marca.Nombre} - Gestión";
         WindowState = FormWindowState.Maximized;
         MinimumSize = new Size(1180, 700);
 
@@ -44,7 +44,7 @@ public sealed class FrmPrincipal : Form
     {
         _nav.Controls.Add(new Label
         {
-            Text = "RETRO GREEN",
+            Text = Marca.Nombre.ToUpperInvariant(),
             Font = Tema.Titulo(19),
             ForeColor = Color.White,
             AutoSize = true,
@@ -99,6 +99,7 @@ public sealed class FrmPrincipal : Form
             Opcion("Cierre de mes", () => new FrmCierre());
             Opcion("Reporte diario", () => new FrmReportes());
             Opcion("Usuarios", () => new FrmUsuarios());
+            Opcion("Personalización", () => new FrmPersonalizacion());
         }
 
         y += 10;
@@ -153,7 +154,7 @@ public sealed class FrmPrincipal : Form
         _contenedor.Controls.Add(f);
         f.Show();
         _actual = f;
-        Text = $"Retro Green - {titulo}";
+        Text = $"{Marca.Nombre} - {titulo}";
     }
 
     private void RevisarExportacionesPendientes()

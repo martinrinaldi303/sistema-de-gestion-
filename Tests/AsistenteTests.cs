@@ -52,7 +52,7 @@ public sealed class AsistenteSemanaTests : PruebaConBase
     [Fact]
     public void UnProfesional_EstaSemana_SinAcentos_YConComision()
     {
-        Bd.Ejecutar("UPDATE Profesionales SET comision_porcentaje = 10 WHERE nombre = 'Anahí';");
+        SetComision("Anahí", 10);
         AgregarServicio(Hoy, "Anahí", "Corte", 20000m);
         AgregarServicio(Hoy, "Pedro", "Corte", 20000m);
 

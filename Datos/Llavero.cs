@@ -71,7 +71,7 @@ public static class Llavero
     /// Pasa un llavero viejo (una sola clave compartida) al esquema de usuarios:
     /// esa clave queda como el admin (Ezequiel). Devuelve true si migro algo.
     /// </summary>
-    public static bool MigrarEsquema(string nombreAdmin = "Ezequiel")
+    public static bool MigrarEsquema(string nombreAdmin = "Administrador")
     {
         var arch = Cargar();
         if (arch.Usuarios.Count > 0) return false;                 // ya esta migrado

@@ -48,7 +48,7 @@ public sealed class CalculosTests : PruebaConBase
     {
         var hoy = DateTime.Today;
         // Pedro al 10%: comisión = 10% de lo facturado.
-        Bd.Ejecutar("UPDATE Profesionales SET comision_porcentaje = 10 WHERE nombre = 'Pedro';");
+        SetComision("Pedro", 10);
         AgregarServicio(hoy, "Pedro", "Corte", 20000m);
 
         var r = ReporteDiario.DeLaBase(hoy);

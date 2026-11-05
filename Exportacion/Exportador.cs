@@ -21,7 +21,7 @@ public static class Exportador
     public static ResultadoExport Generar(string periodo, string carpetaDestino)
     {
         Directory.CreateDirectory(carpetaDestino);
-        var archivo = Path.Combine(carpetaDestino, $"Retro Green {periodo}.xlsx");
+        var archivo = Path.Combine(carpetaDestino, $"{NombreArchivo()} {periodo}.xlsx");
 
         var servicios = Repo.ListarServicios(periodo);
         var egresos = Repo.ListarEgresos(periodo);
@@ -31,7 +31,7 @@ public static class Exportador
 
         // ------------------------------------------------------------ Resumen
         var h = libro.Worksheets.Add("Resumen");
-        Titulo(h, "A1:E1", $"RETRO GREEN - BARBERÍA & PELUQUERÍA");
+        Titulo(h, "A1:E1", Marca.Nombre.ToUpperInvariant());
         Titulo(h, "A2:E2", $"Resumen de {NombreMes(periodo)}", 12);
 
         h.Cell("A4").Value = "Total ingresos";
@@ -76,7 +76,7 @@ public static class Exportador
     public static ResultadoExport GenerarDia(DateTime dia, string carpetaDestino)
     {
         Directory.CreateDirectory(carpetaDestino);
-        var archivo = Path.Combine(carpetaDestino, $"Retro Green dia {Repo.Dia(dia)}.xlsx");
+        var archivo = Path.Combine(carpetaDestino, $"{NombreArchivo()} dia {Repo.Dia(dia)}.xlsx");
 
         var servicios = Repo.ListarServiciosRango(dia, dia);
         foreach (var col in new[] { "Cliente", "Nota" })
@@ -91,7 +91,7 @@ public static class Exportador
 
         // ------------------------------------------------------------ Resumen
         var h = libro.Worksheets.Add("Resumen");
-        Titulo(h, "A1:E1", "RETRO GREEN - BARBERÍA & PELUQUERÍA");
+        Titulo(h, "A1:E1", Marca.Nombre.ToUpperInvariant());
         Titulo(h, "A2:E2", $"Cierre del día {dia:dd/MM/yyyy}", 12);
 
         h.Cell("A4").Value = "Total ingresos";
@@ -221,6 +221,13 @@ public static class Exportador
             case int i: celda.Value = i; break;
             default: celda.Value = valor.ToString(); break;
         }
+    }
+
+    // Nombre del negocio apto para nombre de archivo (sin caracteres inválidos).
+    private static string NombreArchivo()
+    {
+        var limpio = string.Concat(Marca.Nombre.Where(c => !Path.GetInvalidFileNameChars().Contains(c))).Trim();
+        return limpio.Length > 0 ? limpio : "Gestion";
     }
 
     public static string NombreMes(string periodo)

@@ -45,7 +45,7 @@ public sealed class ReporteDiario
 
     public bool HuboMovimiento => CantServicios > 0 || EgresosCent > 0;
 
-    public string Asunto => $"Retro Green · cierre del {Dia:dd/MM/yyyy}";
+    public string Asunto => $"{Marca.Nombre} · cierre del {Dia:dd/MM/yyyy}";
 
     // ------------------------------------------------------------------ HTML
 
@@ -57,7 +57,7 @@ public sealed class ReporteDiario
         var sb = new StringBuilder();
         sb.Append("<div style=\"font-family:Segoe UI,Arial,sans-serif;color:#1a1a1a;max-width:640px\">");
         sb.Append($"<div style=\"background:{Oscuro};padding:16px 20px;border-radius:10px 10px 0 0\">")
-          .Append($"<span style=\"color:{Verde};font-size:12px;letter-spacing:1px\">RETRO GREEN · GESTIÓN</span><br>")
+          .Append($"<span style=\"color:{Verde};font-size:12px;letter-spacing:1px\">{Escapar(Marca.Nombre.ToUpperInvariant())} · GESTIÓN</span><br>")
           .Append($"<span style=\"color:#fff;font-size:20px;font-weight:bold\">Cierre del día {Dia:dd/MM/yyyy}</span></div>");
 
         sb.Append("<div style=\"border:1px solid #e3e3e3;border-top:none;padding:18px 20px;border-radius:0 0 10px 10px\">");
@@ -78,7 +78,7 @@ public sealed class ReporteDiario
         Tabla(sb, "Gastos por categoría", PorCategoria);
 
         sb.Append("<p style=\"color:#999;font-size:11px;margin-top:16px\">")
-          .Append("Reporte automático de Retro Green Gestión. El detalle día por día va en el Excel adjunto.")
+          .Append($"Reporte automático de {Escapar(Marca.Nombre)}. El detalle día por día va en el Excel adjunto.")
           .Append("</p>");
 
         sb.Append("</div></div>");

@@ -28,7 +28,8 @@ public sealed class FrmLogin : Form
               : Modo.Migrar;
 
         Tema.AplicarA(this);
-        Text = "Retro Green - Gestión";
+        // El nombre del negocio vive en la base cifrada (todavía cerrada acá): título neutro.
+        Text = "Gestión";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
 
@@ -80,7 +81,7 @@ public sealed class FrmLogin : Form
         }
         else if (_modo == Modo.CrearAdmin)
         {
-            _nombre.Text = "Ezequiel";
+            _nombre.PlaceholderText = "Tu nombre";
             y = Campo(caja, y, "Nombre del administrador", _nombre);
             y = Campo(caja, y, "Contraseña", _clave);
             y = Campo(caja, y, "Repetí la contraseña", _repetir);
@@ -90,7 +91,7 @@ public sealed class FrmLogin : Form
             y = Campo(caja, y, "Clave con la que abrís hoy", _clave);
             caja.Controls.Add(new Label
             {
-                Text = "Esta clave va a quedar como la de Ezequiel (admin).\nDespués creás los demás usuarios.",
+                Text = "Esta clave va a quedar como la del administrador.\nDespués creás los demás usuarios.",
                 Font = Tema.Normal(8.25f),
                 ForeColor = Tema.Violeta,
                 AutoSize = true,
@@ -291,12 +292,12 @@ public sealed class FrmCodigos : Form
         {
             Title = "Guardar códigos de recuperación",
             Filter = "Texto (*.txt)|*.txt",
-            FileName = $"codigos-recuperacion-retro-green-{DateTime.Now:yyyyMMdd}.txt"
+            FileName = $"codigos-recuperacion-{DateTime.Now:yyyyMMdd}.txt"
         };
         if (sfd.ShowDialog(this) != DialogResult.OK) return;
 
         var contenido =
-            "RETRO GREEN - CÓDIGOS DE RECUPERACIÓN" + Environment.NewLine +
+            $"{Marca.Nombre.ToUpperInvariant()} - CÓDIGOS DE RECUPERACIÓN" + Environment.NewLine +
             $"Generados el {DateTime.Now:dd/MM/yyyy HH:mm}" + Environment.NewLine +
             "Cada código sirve una sola vez. Guardalos en un lugar seguro." +
             Environment.NewLine + Environment.NewLine + texto + Environment.NewLine;
