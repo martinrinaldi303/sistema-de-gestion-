@@ -12,7 +12,7 @@ comentarios y la UI están en español (cultura `es-AR`).
 
 ```bash
 dotnet build RetroGreenGestion.sln            # compilar todo (app + tests)
-dotnet run --project RetroGreenGestion.csproj # ejecutar la app (login + base en Documentos\Retro Green)
+dotnet run --project RetroGreenGestion.csproj # ejecutar la app (login + base en Documentos\Gestion Negocio)
 dotnet test Tests/RetroGreenGestion.Tests.csproj   # correr la suite xUnit
 ```
 
@@ -84,6 +84,33 @@ Las pantallas de admin en el nav se muestran sólo si `Bd.EsAdmin`.
 - `ServicioReportes` — orquesta y **nunca propaga excepción** (el cierre económico no depende
   del correo). El disparo automático es un `System.Windows.Forms.Timer` (1 min) + catch-up en
   `FrmPrincipal.Load`. El HTML y el Excel del día **omiten nombres de clientes** (privacidad).
+
+### White-label: marca, logo y colores (`Datos/Marca.cs`, `Ui/Tema.cs`)
+Es un producto genérico: **no hay marca fija**. `Marca.Nombre` (Config `marca_nombre`,
+default "Mi Negocio") reemplaza todo texto visible de marca en títulos, encabezados, Excel y
+emails. `Marca.Logo` es un archivo (`logo.png`) en la carpeta de datos; `Tema.Logo`/`Icono` lo
+leen (sin logo = fallback neutro). Los **colores de acento** de `Tema` son configurables:
+`Tema.Gamas` (presets) + acento propio, guardados en Config (`tema_gama`/`tema_acento_hex`) y
+aplicados en `Program.Main` con `Tema.CargarGama()` **después del login** (el login usa la gama
+por defecto; el cambio se ve al reiniciar). La pantalla `Ui/FrmPersonalizacion.cs` (admin) setea
+nombre, logo y gama. La semilla (`Bd.Sembrar`) ya **no** crea profesionales/servicios (los carga
+cada negocio); el admin se vuelve profesional al crearse.
+
+### Módulo de stock (`Datos` + `Ui/FrmStock.cs`) — atado a las ventas
+Tablas `Productos`, `MovimientosStock`, `VentasProducto` (en `Esquema.SqlStock`, migradas por
+`Bd.Migrar`). Vender un producto (`Repo.RegistrarVentaProducto`) **suma a la caja y descuenta
+stock** en una transacción. El ingreso de `VentasProducto` se integra al núcleo económico:
+`Totales`, `PorMedioPago`, `TotalesSemana`, `Evolucion`, el reporte diario y el Excel lo
+incluyen; `GuardarResumen` lo congela y `BorrarDetalle` lo purga. Mantiene el patrón
+vivo-vs-cerrado y los centavos.
+
+### Módulo de turnos (`Datos` + `Ui/FrmTurnos.cs`)
+Tabla `Turnos` (`Esquema.SqlTurnos`). Agenda con estados; `Repo.RegistrarServicioDesdeTurno`
+pasa un turno atendido al libro diario reusando `AgregarServicio`. **Bot de recordatorios**
+(`Reportes/ServicioRecordatorios` + `ConfigRecordatorios`): avisa por email a los clientes cuyo
+turno cae dentro de las próximas N horas (config admin: activo/horas/texto). Reusa el envío SMTP
+del reporte diario y corre en el mismo timer de `FrmPrincipal`; nunca lanza. El asistente
+(`Asistente.Responder`) responde sobre stock y turnos con ramas propias antes del ruteo genérico.
 
 ### UI (`Ui/Tema.cs`)
 `Tema` es la única fuente de paleta, tipografía y controles (`Boton`, `Caja`, `Combo`, `Campo`,
